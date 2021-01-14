@@ -1,13 +1,31 @@
 /*
- * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
+ * CDDL HEADER START
  *
  * The contents of this file are subject to the terms of the
- * Common Development and Distribution License, Version 1.0 only.
- * See the file usr/src/LICENSING.NOTICE in this distribution or
- * http://www.opensolaris.org/license/ for details.
+ * Common Development and Distribution License, Version 1.0 only
+ * (the "License").  You may not use this file except in compliance
+ * with the License.
+ *
+ * You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
+ * or http://www.opensolaris.org/os/licensing.
+ * See the License for the specific language governing permissions
+ * and limitations under the License.
+ *
+ * When distributing Covered Code, include this CDDL HEADER in each
+ * file and include the License file at usr/src/OPENSOLARIS.LICENSE.
+ * If applicable, add the following below this CDDL HEADER, with the
+ * fields enclosed by brackets "[]" replaced with your own identifying
+ * information: Portions Copyright [yyyy] [name of copyright owner]
+ *
+ * CDDL HEADER END
  */
-
-#pragma ident	"@(#)ctf_error.c	1.5	03/09/30 SMI"
+/*
+ * Copyright 2003 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
+ */
+/*
+ * Copyright (c) 2019, Joyent, Inc.
+ */
 
 #include <ctf_impl.h>
 
@@ -56,6 +74,16 @@ static const char *const _ctf_errlist[] = {
 	"Limit on number of dynamic types reached",	 /* ECTF_FULL */
 	"Duplicate member name definition",		 /* ECTF_DUPMEMBER */
 	"Conflicting type is already defined",		 /* ECTF_CONFLICT */
+	"Type has outstanding references",		 /* ECTF_REFERENCED */
+	"Type is not a dynamic type",			 /* ECTF_NOTDYN */
+	"Elf library failure",				 /* ECTF_ELF */
+	"Cannot merge child container",			 /* ECTF_MCHILD */
+	"Label already exists",				 /* ECTF_LABEL */
+	"Merged labels conflict",			 /* ECTF_LCONFLICT */
+	"Zlib library failure",				 /* ECTF_ZLIB */
+	"CTF conversion backend error",			 /* ECTF_CONVBKERR */
+	"No C source to convert from",			 /* ECTF_CONVNOCSRC */
+	"No debug info found to convert from"		 /* ECTF_CONVNODEBUG */
 };
 
 static const int _ctf_nerr = sizeof (_ctf_errlist) / sizeof (_ctf_errlist[0]);

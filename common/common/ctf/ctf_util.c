@@ -1,15 +1,34 @@
 /*
- * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
+ * CDDL HEADER START
  *
  * The contents of this file are subject to the terms of the
- * Common Development and Distribution License, Version 1.0 only.
- * See the file usr/src/LICENSING.NOTICE in this distribution or
- * http://www.opensolaris.org/license/ for details.
+ * Common Development and Distribution License, Version 1.0 only
+ * (the "License").  You may not use this file except in compliance
+ * with the License.
+ *
+ * You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
+ * or http://www.opensolaris.org/os/licensing.
+ * See the License for the specific language governing permissions
+ * and limitations under the License.
+ *
+ * When distributing Covered Code, include this CDDL HEADER in each
+ * file and include the License file at usr/src/OPENSOLARIS.LICENSE.
+ * If applicable, add the following below this CDDL HEADER, with the
+ * fields enclosed by brackets "[]" replaced with your own identifying
+ * information: Portions Copyright [yyyy] [name of copyright owner]
+ *
+ * CDDL HEADER END
+ */
+/*
+ * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
+ */
+/*
+ * Copyright (c) 2015, Joyent, Inc.
  */
 
-//#pragma ident	"@(#)ctf_util.c	1.3	03/09/02 SMI"
-
 #include <ctf_impl.h>
+#include <sys/debug.h>
 
 /*
  * Simple doubly-linked list append routine.  This implementation assumes that
@@ -32,6 +51,44 @@ ctf_list_append(ctf_list_t *lp, void *new)
 		p->l_next = q;
 	else
 		lp->l_next = q;
+}
+
+/*
+ * Prepend the specified existing element to the given ctf_list_t.  The
+ * existing pointer should be pointing at a struct with embedded ctf_list_t.
+ */
+void
+ctf_list_prepend(ctf_list_t *lp, void *new)
+{
+	ctf_list_t *p = new;		/* p = new list element */
+	ctf_list_t *q = lp->l_next;	/* q = head list element */
+
+	lp->l_next = p;
+	p->l_prev = NULL;
+	p->l_next = q;
+
+	if (q != NULL)
+		q->l_prev = p;
+	else
+		lp->l_prev = p;
+}
+
+void
+ctf_list_insert_before(ctf_list_t *head, void *item, void *nitem)
+{
+	ctf_list_t *lp = item;
+	ctf_list_t *new = nitem;
+	ctf_list_t *prev = lp->l_prev;
+
+	lp->l_prev = new;
+	new->l_next = lp;
+	new->l_prev = prev;
+	if (prev != NULL) {
+		prev->l_next = new;
+	} else {
+		ASSERT(head->l_next == lp);
+		head->l_next = new;
+	}
 }
 
 /*
@@ -92,6 +149,17 @@ ctf_strdup(const char *s1)
 }
 
 /*
+ * Free a string which was allocated via ctf_alloc()
+ */
+void
+ctf_strfree(char *s)
+{
+	if (s == NULL)
+		return;
+	ctf_free(s, strlen(s) + 1);
+}
+
+/*
  * Store the specified error code into errp if it is non-NULL, and then
  * return NULL for the benefit of the caller.
  */
@@ -112,4 +180,23 @@ ctf_set_errno(ctf_file_t *fp, int err)
 {
 	fp->ctf_errno = err;
 	return (CTF_ERR);
+}
+
+boolean_t
+ctf_sym_valid(uintptr_t strbase, int type, uint16_t shndx, uint64_t val,
+    uint32_t noff)
+{
+	const char *name;
+
+	if (type != STT_OBJECT && type != STT_FUNC)
+		return (B_FALSE);
+	if (shndx == SHN_UNDEF || noff == 0)
+		return (B_FALSE);
+	if (type == STT_OBJECT && shndx == SHN_ABS && val == 0)
+		return (B_FALSE);
+	name = (char *)(strbase + noff);
+	if (strcmp(name, "_START_") == 0 || strcmp(name, "_END_") == 0)
+		return (B_FALSE);
+
+	return (B_TRUE);
 }

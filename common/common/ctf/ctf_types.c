@@ -1,24 +1,36 @@
 /*
- * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
+ * CDDL HEADER START
  *
  * The contents of this file are subject to the terms of the
- * Common Development and Distribution License, Version 1.0 only.
- * See the file usr/src/LICENSING.NOTICE in this distribution or
- * http://www.opensolaris.org/license/ for details.
+ * Common Development and Distribution License, Version 1.0 only
+ * (the "License").  You may not use this file except in compliance
+ * with the License.
+ *
+ * You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
+ * or http://www.opensolaris.org/os/licensing.
+ * See the License for the specific language governing permissions
+ * and limitations under the License.
+ *
+ * When distributing Covered Code, include this CDDL HEADER in each
+ * file and include the License file at usr/src/OPENSOLARIS.LICENSE.
+ * If applicable, add the following below this CDDL HEADER, with the
+ * fields enclosed by brackets "[]" replaced with your own identifying
+ * information: Portions Copyright [yyyy] [name of copyright owner]
+ *
+ * CDDL HEADER END
  */
 
-//#pragma ident	"@(#)ctf_types.c	1.6	03/09/02 SMI"
+/*
+ * Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
+ */
+/*
+ * Copyright 2020 Joyent, Inc.
+ * Copyright 2020 OmniOS Community Edition (OmniOSce) Association.
+ */
 
-# if defined(sun)
-#include <sys/sysmacros.h>
-# endif
 #include <ctf_impl.h>
-
-# if !defined(MAX)
-#	define MAX(a, b) ((a) > (b) ? (a) : (b))
-# endif
-# undef NULL
-# define NULL 0
+#include <sys/debug.h>
 
 ssize_t
 ctf_get_ctt_size(const ctf_file_t *fp, const ctf_type_t *tp, ssize_t *sizep,
@@ -41,6 +53,18 @@ ctf_get_ctt_size(const ctf_file_t *fp, const ctf_type_t *tp, ssize_t *sizep,
 		*incrementp = increment;
 
 	return (size);
+}
+
+void
+ctf_set_ctt_size(ctf_type_t *tp, ssize_t size)
+{
+	if (size > CTF_MAX_SIZE) {
+		tp->ctt_size = CTF_LSIZE_SENT;
+		tp->ctt_lsizehi = CTF_SIZE_TO_LSIZE_HI(size);
+		tp->ctt_lsizelo = CTF_SIZE_TO_LSIZE_LO(size);
+	} else {
+		tp->ctt_size = (ushort_t)size;
+	}
 }
 
 /*
@@ -131,19 +155,21 @@ ctf_enum_iter(ctf_file_t *fp, ctf_id_t type, ctf_enum_f *func, void *arg)
 }
 
 /*
- * Iterate over every root (user-visible) type in the given CTF container.
- * We pass the type ID of each type to the specified callback function.
+ * Iterate over every type in the given CTF container. If the user doesn't ask
+ * for all types, then we only give them the user visible, aka root, types.  We
+ * pass the type ID of each type to the specified callback function.
  */
 int
-ctf_type_iter(ctf_file_t *fp, ctf_type_f *func, void *arg)
+ctf_type_iter(ctf_file_t *fp, boolean_t nonroot, ctf_type_f *func, void *arg)
 {
 	ctf_id_t id, max = fp->ctf_typemax;
 	int rc, child = (fp->ctf_flags & LCTF_CHILD);
 
 	for (id = 1; id <= max; id++) {
 		const ctf_type_t *tp = LCTF_INDEX_TO_TYPEPTR(fp, id);
-		if (CTF_INFO_ISROOT(tp->ctt_info) &&
-		    (rc = func(CTF_INDEX_TO_TYPE(id, child), arg)) != 0)
+		if ((nonroot || CTF_INFO_ISROOT(tp->ctt_info)) &&
+		    (rc = func(CTF_INDEX_TO_TYPE(id, child),
+		    CTF_INFO_ISROOT(tp->ctt_info),  arg)) != 0)
 			return (rc);
 	}
 
@@ -187,144 +213,273 @@ ctf_type_resolve(ctf_file_t *fp, ctf_id_t type)
 }
 
 /*
+ * Format an integer type; if a vname is specified, we need to insert it prior
+ * to any bitfield ":24" suffix.  This works out far simpler than figuring it
+ * out from scratch.
+ */
+static const char *
+ctf_format_int(ctf_decl_t *cd, const char *vname, const char *qname,
+    const char *name)
+{
+	const char *c;
+
+	if (vname == NULL) {
+		if (qname != NULL)
+			ctf_decl_sprintf(cd, "%s`%s", qname, name);
+		else
+			ctf_decl_sprintf(cd, "%s", name);
+		return (NULL);
+	}
+
+	if ((c = strchr(name, ':')) == NULL) {
+		ctf_decl_sprintf(cd, "%s", name);
+		return (vname);
+	}
+
+	/* "unsigned int mybits:23" */
+	ctf_decl_sprintf(cd, "%.*s %s%s", c - name, name, vname, c);
+	return (NULL);
+}
+
+static void
+ctf_format_func(ctf_file_t *fp, ctf_decl_t *cd,
+    const char *vname, ctf_id_t id, int want_func_args)
+{
+	ctf_funcinfo_t fi;
+	/* We'll presume zone_create() is a bad example. */
+	ctf_id_t args[20];
+
+	ctf_decl_sprintf(cd, "%s(", vname == NULL ? "" : vname);
+
+	if (!want_func_args)
+		goto out;
+
+	if (ctf_func_info_by_id(fp, id, &fi) != 0)
+		goto out;
+
+	if (fi.ctc_argc > ARRAY_SIZE(args))
+		fi.ctc_argc = ARRAY_SIZE(args);
+
+	if (fi.ctc_argc == 0) {
+		ctf_decl_sprintf(cd, "void");
+		goto out;
+	}
+
+	if (ctf_func_args_by_id(fp, id, fi.ctc_argc, args) != 0)
+		goto out;
+
+	for (size_t i = 0; i < fi.ctc_argc; i++) {
+		char aname[512];
+
+		if (ctf_type_name(fp, args[i], aname, sizeof (aname)) == NULL)
+			(void) strlcpy(aname, "unknown_t", sizeof (aname));
+
+		ctf_decl_sprintf(cd, "%s%s", aname,
+		    i + 1 == fi.ctc_argc ? "" : ", ");
+	}
+
+	if (fi.ctc_flags & CTF_FUNC_VARARG)
+		ctf_decl_sprintf(cd, "%s...", fi.ctc_argc == 0 ? "" : ", ");
+
+out:
+	ctf_decl_sprintf(cd, ")");
+}
+
+/*
+ * Lookup the given type ID and print a string name for it into buf.  Return the
+ * actual number of bytes (not including \0) needed to format the name.
+ *
+ * "vname" is an optional variable name or similar, so array suffix formatting,
+ * bitfields, and functions are C-correct.  (This is not perfect, as can be seen
+ * in kiconv_ops_t.)
+ */
+static ssize_t
+ctf_type_qlname(ctf_file_t *fp, ctf_id_t type, char *buf, size_t len,
+    const char *vname, const char *qname)
+{
+	int want_func_args = (vname != NULL);
+	ctf_decl_t cd;
+	ctf_decl_node_t *cdp;
+	ctf_decl_prec_t prec, lp, rp;
+	int ptr, arr;
+	uint_t k;
+
+	if (fp == NULL && type == CTF_ERR)
+		return (-1); /* simplify caller code by permitting CTF_ERR */
+
+	ctf_decl_init(&cd, buf, len);
+	ctf_decl_push(&cd, fp, type);
+
+	if (cd.cd_err != 0) {
+		ctf_decl_fini(&cd);
+		return (ctf_set_errno(fp, cd.cd_err));
+	}
+
+	/*
+	 * If the type graph's order conflicts with lexical precedence order
+	 * for pointers or arrays, then we need to surround the declarations at
+	 * the corresponding lexical precedence with parentheses.  This can
+	 * result in either a parenthesized pointer (*) as in int (*)() or
+	 * int (*)[], or in a parenthesized pointer and array as in int (*[])().
+	 */
+	ptr = cd.cd_order[CTF_PREC_POINTER] > CTF_PREC_POINTER;
+	arr = cd.cd_order[CTF_PREC_ARRAY] > CTF_PREC_ARRAY;
+
+	rp = arr ? CTF_PREC_ARRAY : ptr ? CTF_PREC_POINTER : -1;
+	lp = ptr ? CTF_PREC_POINTER : arr ? CTF_PREC_ARRAY : -1;
+
+	k = CTF_K_POINTER; /* avoid leading whitespace (see below) */
+
+	for (prec = CTF_PREC_BASE; prec < CTF_PREC_MAX; prec++) {
+		for (cdp = ctf_list_next(&cd.cd_nodes[prec]);
+		    cdp != NULL; cdp = ctf_list_next(cdp)) {
+
+			ctf_file_t *rfp = fp;
+			const ctf_type_t *tp =
+			    ctf_lookup_by_id(&rfp, cdp->cd_type);
+			const char *name = ctf_strptr(rfp, tp->ctt_name);
+
+			if (k != CTF_K_POINTER && k != CTF_K_ARRAY)
+				ctf_decl_sprintf(&cd, " ");
+
+			if (lp == prec) {
+				ctf_decl_sprintf(&cd, "(");
+				lp = -1;
+			}
+
+			switch (cdp->cd_kind) {
+			case CTF_K_INTEGER:
+				vname = ctf_format_int(&cd, vname, qname, name);
+				break;
+			case CTF_K_FLOAT:
+			case CTF_K_TYPEDEF:
+				if (qname != NULL)
+					ctf_decl_sprintf(&cd, "%s`", qname);
+				ctf_decl_sprintf(&cd, "%s", name);
+				break;
+			case CTF_K_POINTER:
+				ctf_decl_sprintf(&cd, "*");
+				break;
+			case CTF_K_ARRAY:
+				ctf_decl_sprintf(&cd, "%s[%u]",
+				    vname != NULL ? vname : "", cdp->cd_n);
+				vname = NULL;
+				break;
+			case CTF_K_FUNCTION:
+				ctf_format_func(fp, &cd, vname,
+				    cdp->cd_type, want_func_args);
+				vname = NULL;
+				break;
+			case CTF_K_FORWARD:
+				switch (tp->ctt_type) {
+				case CTF_K_UNION:
+					ctf_decl_sprintf(&cd, "union ");
+					break;
+				case CTF_K_ENUM:
+					ctf_decl_sprintf(&cd, "enum ");
+					break;
+				case CTF_K_STRUCT:
+				default:
+					ctf_decl_sprintf(&cd, "struct ");
+					break;
+				}
+				if (qname != NULL)
+					ctf_decl_sprintf(&cd, "%s`", qname);
+				ctf_decl_sprintf(&cd, "%s", name);
+				break;
+			case CTF_K_STRUCT:
+				ctf_decl_sprintf(&cd, "struct ");
+				if (qname != NULL)
+					ctf_decl_sprintf(&cd, "%s`", qname);
+				ctf_decl_sprintf(&cd, "%s", name);
+				break;
+			case CTF_K_UNION:
+				ctf_decl_sprintf(&cd, "union ");
+				if (qname != NULL)
+					ctf_decl_sprintf(&cd, "%s`", qname);
+				ctf_decl_sprintf(&cd, "%s", name);
+				break;
+			case CTF_K_ENUM:
+				ctf_decl_sprintf(&cd, "enum ");
+				if (qname != NULL)
+					ctf_decl_sprintf(&cd, "%s`", qname);
+				ctf_decl_sprintf(&cd, "%s", name);
+				break;
+			case CTF_K_VOLATILE:
+				ctf_decl_sprintf(&cd, "volatile");
+				break;
+			case CTF_K_CONST:
+				ctf_decl_sprintf(&cd, "const");
+				break;
+			case CTF_K_RESTRICT:
+				ctf_decl_sprintf(&cd, "restrict");
+				break;
+			}
+
+			k = cdp->cd_kind;
+		}
+
+		if (rp == prec) {
+			/*
+			 * Peek ahead: if we're going to hit a function,
+			 * we want to insert its name now before this closing
+			 * bracket.
+			 */
+			if (vname != NULL && prec < CTF_PREC_FUNCTION) {
+				cdp = ctf_list_next(
+				    &cd.cd_nodes[CTF_PREC_FUNCTION]);
+
+				if (cdp != NULL) {
+					ctf_decl_sprintf(&cd, "%s", vname);
+					vname = NULL;
+				}
+			}
+
+			ctf_decl_sprintf(&cd, ")");
+		}
+	}
+
+	if (vname != NULL)
+		ctf_decl_sprintf(&cd, " %s", vname);
+
+	if (cd.cd_len >= len)
+		(void) ctf_set_errno(fp, ECTF_NAMELEN);
+
+	ctf_decl_fini(&cd);
+	return (cd.cd_len);
+}
+
+ssize_t
+ctf_type_lname(ctf_file_t *fp, ctf_id_t type, char *buf, size_t len)
+{
+	return (ctf_type_qlname(fp, type, buf, len, NULL, NULL));
+}
+
+/*
  * Lookup the given type ID and print a string name for it into buf.  If buf
- * is too small, an appropriate error will be returned to the caller.
+ * is too small, return NULL: the ECTF_NAMELEN error is set on 'fp' for us.
  */
 char *
 ctf_type_name(ctf_file_t *fp, ctf_id_t type, char *buf, size_t len)
 {
-	ctf_file_t *ofp = fp;
-	const ctf_type_t *tp;
-	const ctf_array_t *ap;
-	const char *name;
-	char *p, *q;
-	uint_t kind;
-	ssize_t size, increment;
-	int rlen;
+	ssize_t rv = ctf_type_qlname(fp, type, buf, len, NULL, NULL);
+	return (rv >= 0 && rv < len ? buf : NULL);
+}
 
-	if (buf == NULL || len == 0) {
-		(void) ctf_set_errno(ofp, EINVAL);
-		return (NULL);
-	}
+char *
+ctf_type_qname(ctf_file_t *fp, ctf_id_t type, char *buf, size_t len,
+    const char *qname)
+{
+	ssize_t rv = ctf_type_qlname(fp, type, buf, len, NULL, qname);
+	return (rv >= 0 && rv < len ? buf : NULL);
+}
 
-	buf[0] = '\0'; /* start with empty string */
-
-	for (p = buf, q = buf + len; p < q; p += strlen(p)) {
-		if ((tp = ctf_lookup_by_id(&fp, type)) == NULL)
-			return (NULL); /* errno is set for us */
-
-		len = (size_t)(q - p); /* bytes remaining in buf */
-		name = ctf_strptr(fp, tp->ctt_name);
-		kind = LCTF_INFO_KIND(fp, tp->ctt_info);
-		(void) ctf_get_ctt_size(fp, tp, &size, &increment);
-
-		if (name[0] != '\0' && (kind == CTF_K_FUNCTION ||
-		    kind == CTF_K_POINTER || kind == CTF_K_VOLATILE ||
-		    kind == CTF_K_CONST || kind == CTF_K_RESTRICT)) {
-			if (snprintf(p, len, "%s", name) >= len)
-				goto out;
-			return (buf);
-		}
-
-		switch (kind) {
-		case CTF_K_TYPEDEF:
-			if (name[0] == '\0') {
-				type = tp->ctt_type;
-				break;
-			}
-			/*FALLTHRU*/
-		case CTF_K_INTEGER:
-		case CTF_K_FLOAT:
-			if (snprintf(p, len, "%s", name) >= len)
-				goto out;
-			return (buf);
-
-		case CTF_K_ARRAY:
-			ap = (const ctf_array_t *)((uintptr_t)tp + increment);
-
-			if (ctf_type_name(fp, ap->cta_contents, p, len) == NULL)
-				return (NULL); /* errno is set for us */
-
-			p = buf + strlen(buf);
-			len = (size_t)(q - p);
-
-			if (snprintf(p, len, " [%u]", ap->cta_nelems) >= len)
-				goto out;
-
-			return (buf);
-
-		case CTF_K_FUNCTION:
-		case CTF_K_POINTER:
-			if (ctf_type_name(fp, tp->ctt_type, p, len) == NULL)
-				return (NULL); /* errno is set for us */
-
-			/*
-			 * We assume that all functions are really
-			 * pointers to functions.
-			 */
-			if (kind == CTF_K_POINTER &&
-			    ctf_type_kind(fp, tp->ctt_type) == CTF_K_FUNCTION)
-				return (buf);
-
-			p = buf + strlen(buf);
-			len = (size_t)(q - p);
-
-			if (kind == CTF_K_FUNCTION)
-				rlen = snprintf(p, len, " (*)()");
-			else if (ctf_type_kind(fp,
-			    tp->ctt_type) == CTF_K_POINTER)
-				rlen = snprintf(p, len, "*");
-			else
-				rlen = snprintf(p, len, " *");
-
-			if (rlen >= len)
-				goto out;
-
-			return (buf);
-
-		case CTF_K_STRUCT:
-		case CTF_K_FORWARD:
-			if (snprintf(p, len, "struct %s", name) >= len)
-				goto out;
-			return (buf);
-
-		case CTF_K_UNION:
-			if (snprintf(p, len, "union %s", name) >= len)
-				goto out;
-			return (buf);
-
-		case CTF_K_ENUM:
-			if (snprintf(p, len, "enum %s", name) >= len)
-				goto out;
-			return (buf);
-
-		case CTF_K_VOLATILE:
-			if (snprintf(p, len, "volatile ") >= len)
-				goto out;
-			type = tp->ctt_type;
-			break;
-
-		case CTF_K_CONST:
-			if (snprintf(p, len, "const ") >= len)
-				goto out;
-			type = tp->ctt_type;
-			break;
-
-		case CTF_K_RESTRICT:
-			if (snprintf(p, len, "restrict ") >= len)
-				goto out;
-			type = tp->ctt_type;
-			break;
-
-		default:
-			(void) ctf_set_errno(ofp, ECTF_CORRUPT);
-			return (NULL);
-		}
-	}
-out:
-	(void) ctf_set_errno(ofp, ECTF_NAMELEN);
-	buf[0] = '\0';
-	return (NULL);
+char *
+ctf_type_cname(ctf_file_t *fp, ctf_id_t type, char *buf, size_t len,
+    const char *cname)
+{
+	ssize_t rv = ctf_type_qlname(fp, type, buf, len, cname, NULL);
+	return (rv >= 0 && rv < len ? buf : NULL);
 }
 
 /*
@@ -351,8 +506,11 @@ ctf_type_size(ctf_file_t *fp, ctf_id_t type)
 	case CTF_K_FUNCTION:
 		return (0); /* function size is only known by symtab */
 
+	case CTF_K_FORWARD:
+		return (0);
+
 	case CTF_K_ENUM:
-		return (fp->ctf_dmodel->ctd_int);
+		return (ctf_get_ctt_size(fp, tp, NULL, NULL));
 
 	case CTF_K_ARRAY:
 		/*
@@ -370,7 +528,22 @@ ctf_type_size(ctf_file_t *fp, ctf_id_t type)
 			return (-1); /* errno is set for us */
 
 		return (size * ar.ctr_nelems);
-
+	case CTF_K_STRUCT:
+	case CTF_K_UNION:
+		/*
+		 * If we have a zero size, we may be in the process of adding a
+		 * structure or union but having not called ctf_update() to deal
+		 * with the circular dependencies in such structures and unions.
+		 * To handle that case, if we get a size of zero from the ctt,
+		 * we look up the dtdef and use its size instead.
+		 */
+		size = ctf_get_ctt_size(fp, tp, NULL, NULL);
+		if (size == 0) {
+			ctf_dtdef_t *dtd = ctf_dtd_lookup(fp, type);
+			if (dtd != NULL)
+				return (dtd->dtd_data.ctt_size);
+		}
+		return (size);
 	default:
 		return (ctf_get_ctt_size(fp, tp, NULL, NULL));
 	}
@@ -434,8 +607,6 @@ ctf_type_align(ctf_file_t *fp, ctf_id_t type)
 	}
 
 	case CTF_K_ENUM:
-		return (fp->ctf_dmodel->ctd_int);
-
 	default:
 		return (ctf_get_ctt_size(fp, tp, NULL, NULL));
 	}
@@ -663,7 +834,6 @@ ctf_member_info(ctf_file_t *fp, ctf_id_t type, const char *name,
 		    ((uintptr_t)tp + increment);
 
 		for (n = LCTF_INFO_VLEN(fp, tp->ctt_info); n != 0; n--, mp++) {
-/*printf("member %s\n", (ctf_strptr(fp, mp->ctm_name)));*/
 			if (strcmp(ctf_strptr(fp, mp->ctm_name), name) == 0) {
 				mip->ctm_type = mp->ctm_type;
 				mip->ctm_offset = mp->ctm_offset;
@@ -764,14 +934,14 @@ ctf_enum_value(ctf_file_t *fp, ctf_id_t type, const char *name, int *valp)
 	uint_t n;
 
 	if ((type = ctf_type_resolve(fp, type)) == CTF_ERR)
-		return (NULL); /* errno is set for us */
+		return (CTF_ERR); /* errno is set for us */
 
 	if ((tp = ctf_lookup_by_id(&fp, type)) == NULL)
-		return (NULL); /* errno is set for us */
+		return (CTF_ERR); /* errno is set for us */
 
 	if (LCTF_INFO_KIND(fp, tp->ctt_info) != CTF_K_ENUM) {
 		(void) ctf_set_errno(ofp, ECTF_NOTENUM);
-		return (NULL);
+		return (CTF_ERR);
 	}
 
 	(void) ctf_get_ctt_size(fp, tp, &size, &increment);
@@ -858,4 +1028,310 @@ int
 ctf_type_visit(ctf_file_t *fp, ctf_id_t type, ctf_visit_f *func, void *arg)
 {
 	return (ctf_type_rvisit(fp, type, func, arg, "", 0, 0));
+}
+
+int
+ctf_func_info_by_id(ctf_file_t *fp, ctf_id_t type, ctf_funcinfo_t *fip)
+{
+	ctf_file_t *ofp = fp;
+	const ctf_type_t *tp;
+	const ushort_t *dp;
+	int nargs;
+	ssize_t increment;
+
+	if ((tp = ctf_lookup_by_id(&fp, type)) == NULL)
+		return (CTF_ERR); /* errno is set for us */
+
+	if (LCTF_INFO_KIND(fp, tp->ctt_info) != CTF_K_FUNCTION)
+		return (ctf_set_errno(ofp, ECTF_NOTFUNC));
+
+	fip->ctc_return = tp->ctt_type;
+	nargs = LCTF_INFO_VLEN(fp, tp->ctt_info);
+	fip->ctc_argc = nargs;
+	fip->ctc_flags = 0;
+
+	/* dp should now point to the first argument */
+	if (nargs != 0) {
+		(void) ctf_get_ctt_size(fp, tp, NULL, &increment);
+		dp = (ushort_t *)((uintptr_t)fp->ctf_buf +
+		    fp->ctf_txlate[CTF_TYPE_TO_INDEX(type)] + increment);
+		if (dp[nargs - 1] == 0) {
+			fip->ctc_flags |= CTF_FUNC_VARARG;
+			fip->ctc_argc--;
+		}
+	}
+
+	return (0);
+}
+
+int
+ctf_func_args_by_id(ctf_file_t *fp, ctf_id_t type, uint_t argc, ctf_id_t *argv)
+{
+	ctf_file_t *ofp = fp;
+	const ctf_type_t *tp;
+	const ushort_t *dp;
+	int nargs;
+	ssize_t increment;
+
+	if ((tp = ctf_lookup_by_id(&fp, type)) == NULL)
+		return (CTF_ERR); /* errno is set for us */
+
+	if (LCTF_INFO_KIND(fp, tp->ctt_info) != CTF_K_FUNCTION)
+		return (ctf_set_errno(ofp, ECTF_NOTFUNC));
+
+	nargs = LCTF_INFO_VLEN(fp, tp->ctt_info);
+	(void) ctf_get_ctt_size(fp, tp, NULL, &increment);
+	dp = (ushort_t *)((uintptr_t)fp->ctf_buf +
+	    fp->ctf_txlate[CTF_TYPE_TO_INDEX(type)] +
+	    increment);
+	if (nargs != 0 && dp[nargs - 1] == 0)
+		nargs--;
+
+	for (nargs = MIN(argc, nargs); nargs != 0; nargs--)
+		*argv++ = *dp++;
+
+	return (0);
+}
+
+int
+ctf_object_iter(ctf_file_t *fp, ctf_object_f *func, void *arg)
+{
+	int i, ret;
+	ctf_id_t id;
+	uintptr_t symbase = (uintptr_t)fp->ctf_symtab.cts_data;
+	uintptr_t strbase = (uintptr_t)fp->ctf_strtab.cts_data;
+
+	if (fp->ctf_symtab.cts_data == NULL)
+		return (ctf_set_errno(fp, ECTF_NOSYMTAB));
+
+	for (i = 0; i < fp->ctf_nsyms; i++) {
+		char *name;
+		if (fp->ctf_sxlate[i] == -1u)
+			continue;
+		id = *(ushort_t *)((uintptr_t)fp->ctf_buf +
+		    fp->ctf_sxlate[i]);
+
+		/*
+		 * Validate whether or not we're looking at a data object as
+		 * oposed to a function.
+		 */
+		if (fp->ctf_symtab.cts_entsize == sizeof (Elf32_Sym)) {
+			const Elf32_Sym *symp = (Elf32_Sym *)symbase + i;
+			if (ELF32_ST_TYPE(symp->st_info) != STT_OBJECT)
+				continue;
+			if (fp->ctf_strtab.cts_data != NULL &&
+			    symp->st_name != 0)
+				name = (char *)(strbase + symp->st_name);
+			else
+				name = NULL;
+		} else {
+			const Elf64_Sym *symp = (Elf64_Sym *)symbase + i;
+			if (ELF64_ST_TYPE(symp->st_info) != STT_OBJECT)
+				continue;
+			if (fp->ctf_strtab.cts_data != NULL &&
+			    symp->st_name != 0)
+				name = (char *)(strbase + symp->st_name);
+			else
+				name = NULL;
+		}
+
+		if ((ret = func(name, id, i, arg)) != 0)
+			return (ret);
+	}
+
+	return (0);
+}
+
+int
+ctf_function_iter(ctf_file_t *fp, ctf_function_f *func, void *arg)
+{
+	int i, ret;
+	uintptr_t symbase = (uintptr_t)fp->ctf_symtab.cts_data;
+	uintptr_t strbase = (uintptr_t)fp->ctf_strtab.cts_data;
+
+	if (fp->ctf_symtab.cts_data == NULL)
+		return (ctf_set_errno(fp, ECTF_NOSYMTAB));
+
+	for (i = 0; i < fp->ctf_nsyms; i++) {
+		char *name;
+		ushort_t info, *dp;
+		ctf_funcinfo_t fi;
+		if (fp->ctf_sxlate[i] == -1u)
+			continue;
+
+		dp = (ushort_t *)((uintptr_t)fp->ctf_buf +
+		    fp->ctf_sxlate[i]);
+		info = *dp;
+		if (info == 0)
+			continue;
+
+		/*
+		 * This may be a function or it may be a data object. We have to
+		 * consult the symbol table to be certain. Functions are encoded
+		 * with their info, data objects with their actual type.
+		 */
+		if (fp->ctf_symtab.cts_entsize == sizeof (Elf32_Sym)) {
+			const Elf32_Sym *symp = (Elf32_Sym *)symbase + i;
+			if (ELF32_ST_TYPE(symp->st_info) != STT_FUNC)
+				continue;
+			if (fp->ctf_strtab.cts_data != NULL)
+				name = (char *)(strbase + symp->st_name);
+			else
+				name = NULL;
+		} else {
+			const Elf64_Sym *symp = (Elf64_Sym *)symbase + i;
+			if (ELF64_ST_TYPE(symp->st_info) != STT_FUNC)
+				continue;
+			if (fp->ctf_strtab.cts_data != NULL)
+				name = (char *)(strbase + symp->st_name);
+			else
+				name = NULL;
+		}
+
+		if (LCTF_INFO_KIND(fp, info) != CTF_K_FUNCTION)
+			continue;
+		dp++;
+		fi.ctc_return = *dp;
+		dp++;
+		fi.ctc_argc = LCTF_INFO_VLEN(fp, info);
+		fi.ctc_flags = 0;
+
+		if (fi.ctc_argc != 0 && dp[fi.ctc_argc - 1] == 0) {
+			fi.ctc_flags |= CTF_FUNC_VARARG;
+			fi.ctc_argc--;
+		}
+
+		if ((ret = func(name, i, &fi, arg)) != 0)
+			return (ret);
+
+	}
+
+	return (0);
+}
+
+char *
+ctf_symbol_name(ctf_file_t *fp, ulong_t idx, char *buf, size_t len)
+{
+	const char *name;
+	uintptr_t symbase = (uintptr_t)fp->ctf_symtab.cts_data;
+	uintptr_t strbase = (uintptr_t)fp->ctf_strtab.cts_data;
+
+	if (fp->ctf_symtab.cts_data == NULL) {
+		(void) ctf_set_errno(fp, ECTF_NOSYMTAB);
+		return (NULL);
+	}
+
+	if (fp->ctf_strtab.cts_data == NULL) {
+		(void) ctf_set_errno(fp, ECTF_STRTAB);
+		return (NULL);
+	}
+
+	if (idx > fp->ctf_nsyms) {
+		(void) ctf_set_errno(fp, ECTF_NOTDATA);
+		return (NULL);
+	}
+
+	if (fp->ctf_symtab.cts_entsize == sizeof (Elf32_Sym)) {
+		const Elf32_Sym *symp = (Elf32_Sym *)symbase + idx;
+		if (ELF32_ST_TYPE(symp->st_info) != STT_OBJECT &&
+		    ELF32_ST_TYPE(symp->st_info) != STT_FUNC) {
+			(void) ctf_set_errno(fp, ECTF_NOTDATA);
+			return (NULL);
+		}
+		if (symp->st_name == 0) {
+			(void) ctf_set_errno(fp, ENOENT);
+			return (NULL);
+		}
+		name = (const char *)(strbase + symp->st_name);
+	} else {
+		const Elf64_Sym *symp = (Elf64_Sym *)symbase + idx;
+		if (ELF64_ST_TYPE(symp->st_info) != STT_FUNC &&
+		    ELF64_ST_TYPE(symp->st_info) != STT_OBJECT) {
+			(void) ctf_set_errno(fp, ECTF_NOTDATA);
+			return (NULL);
+		}
+		if (symp->st_name == 0) {
+			(void) ctf_set_errno(fp, ENOENT);
+			return (NULL);
+		}
+		name = (const char *)(strbase + symp->st_name);
+	}
+
+	(void) strlcpy(buf, name, len);
+
+	return (buf);
+}
+
+int
+ctf_string_iter(ctf_file_t *fp, ctf_string_f *func, void *arg)
+{
+	int rc;
+	const char *strp = fp->ctf_str[CTF_STRTAB_0].cts_strs;
+	size_t strl = fp->ctf_str[CTF_STRTAB_0].cts_len;
+
+	while (strl > 0) {
+		size_t len;
+
+		if ((rc = func(strp, arg)) != 0)
+			return (rc);
+
+		len = strlen(strp) + 1;
+		strl -= len;
+		strp += len;
+	}
+
+	return (0);
+}
+
+/*
+ * fp isn't strictly necessary at the moment. However, if we ever rev the file
+ * format, the valid values for kind will change.
+ */
+const char *
+ctf_kind_name(ctf_file_t *fp, int kind)
+{
+	switch (kind) {
+	case CTF_K_INTEGER:
+		return ("integer");
+	case CTF_K_FLOAT:
+		return ("float");
+	case CTF_K_POINTER:
+		return ("pointer");
+	case CTF_K_ARRAY:
+		return ("array");
+	case CTF_K_FUNCTION:
+		return ("function");
+	case CTF_K_STRUCT:
+		return ("struct");
+	case CTF_K_UNION:
+		return ("union");
+	case CTF_K_ENUM:
+		return ("enum");
+	case CTF_K_FORWARD:
+		return ("forward");
+	case CTF_K_TYPEDEF:
+		return ("typedef");
+	case CTF_K_VOLATILE:
+		return ("volatile");
+	case CTF_K_CONST:
+		return ("const");
+	case CTF_K_RESTRICT:
+		return ("restrict");
+	case CTF_K_UNKNOWN:
+	default:
+		return ("unknown");
+	}
+}
+
+ctf_id_t
+ctf_max_id(ctf_file_t *fp)
+{
+	int child = (fp->ctf_flags & LCTF_CHILD);
+	return (fp->ctf_typemax + (child ? CTF_CHILD_START : 0));
+}
+
+ulong_t
+ctf_nr_syms(ctf_file_t *fp)
+{
+	return (fp->ctf_nsyms);
 }

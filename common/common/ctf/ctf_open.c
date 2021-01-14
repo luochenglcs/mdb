@@ -24,14 +24,14 @@
  * Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
-
-//#pragma ident   "@(#)ctf_open.c 1.10    06/01/07 SMI"
+/*
+ * Copyright (c) 2015, Joyent, Inc.  All rights reserved.
+ * Copyright 2020 OmniOS Community Edition (OmniOSce) Association.
+ */
 
 #include <ctf_impl.h>
-# if !__KERNEL__
 #include <sys/mman.h>
 #include <sys/zmod.h>
-# endif
 
 static const ctf_dmodel_t _libctf_models[] = {
 	{ "ILP32", CTF_MODEL_ILP32, 4, 1, 2, 4, 4 },
@@ -44,12 +44,6 @@ const char _CTF_NULLSTR[] = "";
 
 int _libctf_version = CTF_VERSION;	/* library client version */
 int _libctf_debug = 0;			/* debugging messages enabled */
-
-# define 	z_uncompress ctf_uncompress
-# define	z_strerror ctf_zstrerror
-
-int ctf_uncompress (char *dest, int *destLen, char *source, int sourceLen);
-char	*ctf_zstrerror(int);
 
 static ushort_t
 get_kind_v1(ushort_t info)
@@ -204,15 +198,16 @@ init_symtab(ctf_file_t *fp, const ctf_header_t *hp,
  * and initialize the hash tables of each named type.
  */
 static int
-init_types(ctf_file_t *fp, const ctf_header_t *hp)
+init_types(ctf_file_t *fp, const ctf_header_t *cth)
 {
 	/* LINTED - pointer alignment */
-	const ctf_type_t *tbuf = (ctf_type_t *)(fp->ctf_buf + hp->cth_typeoff);
+	const ctf_type_t *tbuf = (ctf_type_t *)(fp->ctf_buf + cth->cth_typeoff);
 	/* LINTED - pointer alignment */
-	const ctf_type_t *tend = (ctf_type_t *)(fp->ctf_buf + hp->cth_stroff);
+	const ctf_type_t *tend = (ctf_type_t *)(fp->ctf_buf + cth->cth_stroff);
 
 	ulong_t pop[CTF_K_MAX + 1] = { 0 };
 	const ctf_type_t *tp;
+	ctf_hash_t *hp;
 	ushort_t id, dst;
 	uint_t *xp;
 
@@ -222,7 +217,7 @@ init_types(ctf_file_t *fp, const ctf_header_t *hp)
 	 * date cth_parname, we also scan the types themselves for references
 	 * to values in the range reserved for child types in our first pass.
 	 */
-	int child = hp->cth_parname != 0;
+	int child = cth->cth_parname != 0;
 	int nlstructs = 0, nlunions = 0;
 	int err;
 
@@ -275,6 +270,17 @@ init_types(ctf_file_t *fp, const ctf_header_t *hp)
 			vbytes = sizeof (ctf_enum_t) * vlen;
 			break;
 		case CTF_K_FORWARD:
+			/*
+			 * For forward declarations, ctt_type is the CTF_K_*
+			 * kind for the tag, so bump that population count too.
+			 * If ctt_type is unknown, treat the tag as a struct.
+			 */
+			if (tp->ctt_type == CTF_K_UNKNOWN ||
+			    tp->ctt_type >= CTF_K_MAX)
+				pop[CTF_K_STRUCT]++;
+			else
+				pop[tp->ctt_type]++;
+			/*FALLTHRU*/
 		case CTF_K_UNKNOWN:
 			vbytes = 0;
 			break;
@@ -308,8 +314,7 @@ init_types(ctf_file_t *fp, const ctf_header_t *hp)
 	 * Now that we've counted up the number of each type, we can allocate
 	 * the hash tables, type translation table, and pointer table.
 	 */
-	if ((err = ctf_hash_create(&fp->ctf_structs,
-	    pop[CTF_K_STRUCT] + pop[CTF_K_FORWARD])) != 0)
+	if ((err = ctf_hash_create(&fp->ctf_structs, pop[CTF_K_STRUCT])) != 0)
 		return (err);
 
 	if ((err = ctf_hash_create(&fp->ctf_unions, pop[CTF_K_UNION])) != 0)
@@ -391,18 +396,11 @@ init_types(ctf_file_t *fp, const ctf_header_t *hp)
 			break;
 
 		case CTF_K_STRUCT:
-			/*
-			 * If a struct's name is already present as a forward
-			 * tag, then replace the tag with the struct definition.
-			 */
-			if ((hep = ctf_hash_lookup(&fp->ctf_structs, fp,
-			    name, strlen(name))) == NULL) {
-				err = ctf_hash_insert(&fp->ctf_structs, fp,
-				    CTF_INDEX_TO_TYPE(id, child), tp->ctt_name);
-				if (err != 0 && err != ECTF_STRTAB)
-					return (err);
-			} else
-				hep->h_type = CTF_INDEX_TO_TYPE(id, child);
+			err = ctf_hash_define(&fp->ctf_structs, fp,
+			    CTF_INDEX_TO_TYPE(id, child), tp->ctt_name);
+
+			if (err != 0 && err != ECTF_STRTAB)
+				return (err);
 
 			if (fp->ctf_version == CTF_VERSION_1 ||
 			    size < CTF_LSTRUCT_THRESH)
@@ -414,8 +412,9 @@ init_types(ctf_file_t *fp, const ctf_header_t *hp)
 			break;
 
 		case CTF_K_UNION:
-			err = ctf_hash_insert(&fp->ctf_unions, fp,
+			err = ctf_hash_define(&fp->ctf_unions, fp,
 			    CTF_INDEX_TO_TYPE(id, child), tp->ctt_name);
+
 			if (err != 0 && err != ECTF_STRTAB)
 				return (err);
 
@@ -429,10 +428,12 @@ init_types(ctf_file_t *fp, const ctf_header_t *hp)
 			break;
 
 		case CTF_K_ENUM:
-			err = ctf_hash_insert(&fp->ctf_enums, fp,
+			err = ctf_hash_define(&fp->ctf_enums, fp,
 			    CTF_INDEX_TO_TYPE(id, child), tp->ctt_name);
+
 			if (err != 0 && err != ECTF_STRTAB)
 				return (err);
+
 			vbytes = sizeof (ctf_enum_t) * vlen;
 			break;
 
@@ -446,12 +447,26 @@ init_types(ctf_file_t *fp, const ctf_header_t *hp)
 
 		case CTF_K_FORWARD:
 			/*
-			 * Only insert forward tags into the struct hash if the
-			 * struct or tag name is not already present.
+			 * Only insert forward tags into the given hash if the
+			 * type or tag name is not already present.
 			 */
-			if (ctf_hash_lookup(&fp->ctf_structs, fp,
+			switch (tp->ctt_type) {
+			case CTF_K_STRUCT:
+				hp = &fp->ctf_structs;
+				break;
+			case CTF_K_UNION:
+				hp = &fp->ctf_unions;
+				break;
+			case CTF_K_ENUM:
+				hp = &fp->ctf_enums;
+				break;
+			default:
+				hp = &fp->ctf_structs;
+			}
+
+			if (ctf_hash_lookup(hp, fp,
 			    name, strlen(name)) == NULL) {
-				err = ctf_hash_insert(&fp->ctf_structs, fp,
+				err = ctf_hash_insert(hp, fp,
 				    CTF_INDEX_TO_TYPE(id, child), tp->ctt_name);
 				if (err != 0 && err != ECTF_STRTAB)
 					return (err);
@@ -536,6 +551,7 @@ ctf_bufopen(const ctf_sect_t *ctfsect, const ctf_sect_t *symsect,
 	void *buf, *base;
 	size_t size, hdrsz;
 	int err;
+	uint_t hflags;
 
 	if (ctfsect == NULL || ((symsect == NULL) != (strsect == NULL)))
 		return (ctf_set_open_errno(errp, EINVAL));
@@ -617,9 +633,9 @@ ctf_bufopen(const ctf_sect_t *ctfsect, const ctf_sect_t *symsect,
 	 * the CTF data buffer if it is compressed.  Otherwise we just put
 	 * the data section's buffer pointer into ctf_buf, below.
 	 */
+	hflags = hp.cth_flags;
 	if (hp.cth_flags & CTF_F_COMPRESS) {
-		size_t srclen;
-		int	dstlen;
+		size_t srclen, dstlen;
 		const void *src;
 		int rc = Z_OK;
 
@@ -637,7 +653,7 @@ ctf_bufopen(const ctf_sect_t *ctfsect, const ctf_sect_t *symsect,
 		srclen = ctfsect->cts_size - hdrsz;
 		dstlen = size;
 
-		if ((rc = z_uncompress(buf, &dstlen, (char *) src, srclen)) != Z_OK) {
+		if ((rc = z_uncompress(buf, &dstlen, src, srclen)) != Z_OK) {
 			ctf_dprintf("zlib inflate err: %s\n", z_strerror(rc));
 			ctf_data_free(base, size + hdrsz);
 			return (ctf_set_open_errno(errp, ECTF_DECOMPRESS));
@@ -667,6 +683,7 @@ ctf_bufopen(const ctf_sect_t *ctfsect, const ctf_sect_t *symsect,
 	bzero(fp, sizeof (ctf_file_t));
 	fp->ctf_version = hp.cth_version;
 	fp->ctf_fileops = &ctf_fileops[hp.cth_version];
+	fp->ctf_hflags = hflags;
 	bcopy(ctfsect, &fp->ctf_data, sizeof (ctf_sect_t));
 
 	if (symsect != NULL) {
@@ -775,6 +792,92 @@ bad:
 }
 
 /*
+ * Dupliate a ctf_file_t and its underlying section information into a new
+ * container. This works by copying the three ctf_sect_t's of the original
+ * container if they exist and passing those into ctf_bufopen. To copy those, we
+ * mmap anonymous memory with ctf_data_alloc and bcopy the data across. It's not
+ * the cheapest thing, but it's what we've got.
+ */
+ctf_file_t *
+ctf_dup(ctf_file_t *ofp)
+{
+	ctf_file_t *fp;
+	ctf_sect_t ctfsect, symsect, strsect;
+	ctf_sect_t *ctp, *symp, *strp;
+	void *cbuf, *symbuf, *strbuf;
+	int err;
+
+	cbuf = symbuf = strbuf = NULL;
+	/*
+	 * The ctfsect isn't allowed to not exist, but the symbol and string
+	 * section might not. We only need to copy the data of the section, not
+	 * the name, as ctf_bufopen will take care of that.
+	 */
+	bcopy(&ofp->ctf_data, &ctfsect, sizeof (ctf_sect_t));
+	cbuf = ctf_data_alloc(ctfsect.cts_size);
+	if (cbuf == NULL) {
+		(void) ctf_set_errno(ofp, ECTF_MMAP);
+		return (NULL);
+	}
+
+	bcopy(ctfsect.cts_data, cbuf, ctfsect.cts_size);
+	ctf_data_protect(cbuf, ctfsect.cts_size);
+	ctfsect.cts_data = cbuf;
+	ctfsect.cts_offset = 0;
+	ctp = &ctfsect;
+
+	if (ofp->ctf_symtab.cts_data != NULL) {
+		bcopy(&ofp->ctf_symtab, &symsect, sizeof (ctf_sect_t));
+		symbuf = ctf_data_alloc(symsect.cts_size);
+		if (symbuf == NULL) {
+			(void) ctf_set_errno(ofp, ECTF_MMAP);
+			goto err;
+		}
+		bcopy(symsect.cts_data, symbuf, symsect.cts_size);
+		ctf_data_protect(symbuf, symsect.cts_size);
+		symsect.cts_data = symbuf;
+		symsect.cts_offset = 0;
+		symp = &symsect;
+	} else {
+		symp = NULL;
+	}
+
+	if (ofp->ctf_strtab.cts_data != NULL) {
+		bcopy(&ofp->ctf_strtab, &strsect, sizeof (ctf_sect_t));
+		strbuf = ctf_data_alloc(strsect.cts_size);
+		if (strbuf == NULL) {
+			(void) ctf_set_errno(ofp, ECTF_MMAP);
+			goto err;
+		}
+		bcopy(strsect.cts_data, strbuf, strsect.cts_size);
+		ctf_data_protect(strbuf, strsect.cts_size);
+		strsect.cts_data = strbuf;
+		strsect.cts_offset = 0;
+		strp = &strsect;
+	} else {
+		strp = NULL;
+	}
+
+	fp = ctf_bufopen(ctp, symp, strp, &err);
+	if (fp == NULL) {
+		(void) ctf_set_errno(ofp, err);
+		goto err;
+	}
+
+	fp->ctf_flags |= LCTF_MMAP;
+
+	return (fp);
+
+err:
+	ctf_data_free(cbuf, ctfsect.cts_size);
+	if (symbuf != NULL)
+		ctf_data_free(symbuf, symsect.cts_size);
+	if (strbuf != NULL)
+		ctf_data_free(strbuf, strsect.cts_size);
+	return (NULL);
+}
+
+/*
  * Close the specified CTF container and free associated data structures.  Note
  * that ctf_close() is a reference counted operation: if the specified file is
  * the parent of other active containers, its reference count will be greater
@@ -784,7 +887,8 @@ void
 ctf_close(ctf_file_t *fp)
 {
 	ctf_dtdef_t *dtd, *ntd;
-	ctf_dmdef_t *dmd, *nmd;
+	ctf_dsdef_t *dsd, *nsd;
+	ctf_dldef_t *dld, *nld;
 
 	if (fp == NULL)
 		return; /* allow ctf_close(NULL) to simplify caller code */
@@ -796,44 +900,46 @@ ctf_close(ctf_file_t *fp)
 		return;
 	}
 
-	for (dtd = ctf_list_next(&fp->ctf_dtdefs); dtd != NULL; dtd = ntd) {
-		switch (CTF_INFO_KIND(dtd->dtd_data.ctt_info)) {
-		case CTF_K_STRUCT:
-		case CTF_K_UNION:
-		case CTF_K_ENUM:
-			for (dmd = ctf_list_next(&dtd->dtd_u.dtu_members);
-			    dmd != NULL; dmd = nmd) {
-				if (dmd->dmd_name != NULL) {
-					ctf_free(dmd->dmd_name,
-					    strlen(dmd->dmd_name) + 1);
-				}
-				nmd = ctf_list_next(dmd);
-				ctf_free(dmd, sizeof (ctf_dmdef_t));
-			}
-			break;
-		case CTF_K_FUNCTION:
-			ctf_free(dtd->dtd_u.dtu_argv, sizeof (ctf_id_t) *
-			    CTF_INFO_VLEN(dtd->dtd_data.ctt_info));
-			break;
-		}
-
-		if (dtd->dtd_name != NULL)
-			ctf_free(dtd->dtd_name, strlen(dtd->dtd_name) + 1);
-
-		ntd = ctf_list_next(dtd);
-		ctf_free(dtd, sizeof (ctf_dtdef_t));
-	}
-
 	if (fp->ctf_parent != NULL)
 		ctf_close(fp->ctf_parent);
 
+	/*
+	 * Note, to work properly with reference counting on the dynamic
+	 * section, we must delete the list in reverse.
+	 */
+	for (dtd = ctf_list_prev(&fp->ctf_dtdefs); dtd != NULL; dtd = ntd) {
+		ntd = ctf_list_prev(dtd);
+		ctf_dtd_delete(fp, dtd);
+	}
+
+	for (dsd = ctf_list_prev(&fp->ctf_dsdefs); dsd != NULL; dsd = nsd) {
+		nsd = ctf_list_prev(dsd);
+		ctf_dsd_delete(fp, dsd);
+	}
+
+	for (dld = ctf_list_prev(&fp->ctf_dldefs); dld != NULL; dld = nld) {
+		nld = ctf_list_prev(dld);
+		ctf_dld_delete(fp, dld);
+	}
+
+	ctf_free(fp->ctf_dthash, fp->ctf_dthashlen * sizeof (ctf_dtdef_t *));
+
 	if (fp->ctf_flags & LCTF_MMAP) {
-		if (fp->ctf_data.cts_data != NULL)
+		/*
+		 * Writeable containers shouldn't necessairily have the CTF
+		 * section freed.
+		 */
+		if (fp->ctf_data.cts_data != NULL &&
+		    !(fp->ctf_flags & LCTF_RDWR))
 			ctf_sect_munmap(&fp->ctf_data);
 		if (fp->ctf_symtab.cts_data != NULL)
 			ctf_sect_munmap(&fp->ctf_symtab);
 		if (fp->ctf_strtab.cts_data != NULL)
 			ctf_sect_munmap(&fp->ctf_strtab);
+	}
+	if (fp->ctf_flags & LCTF_FREE) {
+		ctf_data_free((void *)fp->ctf_data.cts_data,
+		    fp->ctf_data.cts_size);
 	}
 
 	if (fp->ctf_data.cts_name != _CTF_NULLSTR &&
@@ -899,6 +1005,16 @@ ctf_parent_name(ctf_file_t *fp)
 }
 
 /*
+ * Return the label of the parent CTF container, if one exists. Otherwise return
+ * NULL.
+ */
+const char *
+ctf_parent_label(ctf_file_t *fp)
+{
+	return (fp->ctf_parlabel);
+}
+
+/*
  * Import the types from the specified parent container by storing a pointer
  * to it in ctf_parent and incrementing its reference count.  Only one parent
  * is allowed: if a parent already exists, it is replaced by the new parent.
@@ -950,14 +1066,21 @@ ctf_getmodel(ctf_file_t *fp)
 {
 	return (fp->ctf_dmodel->ctd_code);
 }
+
 void
 ctf_setspecific(ctf_file_t *fp, void *data)
 {
-        fp->ctf_specific = data;
+	fp->ctf_specific = data;
 }
 
 void *
 ctf_getspecific(ctf_file_t *fp)
 {
-        return (fp->ctf_specific);
+	return (fp->ctf_specific);
+}
+
+uint_t
+ctf_flags(ctf_file_t *fp)
+{
+	return (fp->ctf_hflags);
 }

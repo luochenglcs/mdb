@@ -1,15 +1,34 @@
 /*
- * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
+ * CDDL HEADER START
  *
  * The contents of this file are subject to the terms of the
- * Common Development and Distribution License, Version 1.0 only.
- * See the file usr/src/LICENSING.NOTICE in this distribution or
- * http://www.opensolaris.org/license/ for details.
+ * Common Development and Distribution License, Version 1.0 only
+ * (the "License").  You may not use this file except in compliance
+ * with the License.
+ *
+ * You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
+ * or http://www.opensolaris.org/os/licensing.
+ * See the License for the specific language governing permissions
+ * and limitations under the License.
+ *
+ * When distributing Covered Code, include this CDDL HEADER in each
+ * file and include the License file at usr/src/OPENSOLARIS.LICENSE.
+ * If applicable, add the following below this CDDL HEADER, with the
+ * fields enclosed by brackets "[]" replaced with your own identifying
+ * information: Portions Copyright [yyyy] [name of copyright owner]
+ *
+ * CDDL HEADER END
  */
 
-//#pragma ident	"@(#)ctf_hash.c	1.3	04/05/04 SMI"
+/*
+ * Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
+ *
+ * Copyright 2020 OmniOS Community Edition (OmniOSce) Association.
+ */
 
 #include <ctf_impl.h>
+#include <sys/debug.h>
 
 static const ushort_t _CTF_EMPTY[1] = { 0 };
 
@@ -105,6 +124,24 @@ ctf_hash_insert(ctf_hash_t *hp, ctf_file_t *fp, ushort_t type, uint_t name)
 	return (0);
 }
 
+/*
+ * Wrapper for ctf_hash_lookup/ctf_hash_insert: if the key is already in the
+ * hash, override the previous definition with this new official definition.
+ * If the key is not present, then call ctf_hash_insert() and hash it in.
+ */
+int
+ctf_hash_define(ctf_hash_t *hp, ctf_file_t *fp, ushort_t type, uint_t name)
+{
+	const char *str = ctf_strptr(fp, name);
+	ctf_helem_t *hep = ctf_hash_lookup(hp, fp, str, strlen(str));
+
+	if (hep == NULL)
+		return (ctf_hash_insert(hp, fp, type, name));
+
+	hep->h_type = type;
+	return (0);
+}
+
 ctf_helem_t *
 ctf_hash_lookup(ctf_hash_t *hp, ctf_file_t *fp, const char *key, size_t len)
 {
@@ -138,5 +175,27 @@ ctf_hash_destroy(ctf_hash_t *hp)
 	if (hp->h_chains != NULL) {
 		ctf_free(hp->h_chains, sizeof (ctf_helem_t) * hp->h_nelems);
 		hp->h_chains = NULL;
+	}
+}
+
+void
+ctf_hash_dump(const char *tag, ctf_hash_t *hp, ctf_file_t *fp)
+{
+	ctf_dprintf("---------------\nHash dump - %s\n", tag);
+
+	for (ushort_t h = 0; h < hp->h_nbuckets; h++) {
+		ctf_helem_t *hep;
+
+		for (ushort_t i = hp->h_buckets[h]; i != 0; i = hep->h_next) {
+			ctf_strs_t *ctsp;
+			const char *str;
+
+			hep = &hp->h_chains[i];
+			ctsp = &fp->ctf_str[CTF_NAME_STID(hep->h_name)];
+			str = ctsp->cts_strs + CTF_NAME_OFFSET(hep->h_name);
+
+			ctf_dprintf(" - %3u/%3u  - '%s' type %u\n", h, i, str,
+			    hep->h_type);
+		}
 	}
 }
