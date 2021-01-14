@@ -1,0 +1,2 @@
+#define	MAXNAMELEN	256
+#define DEV_BSIZE	512
