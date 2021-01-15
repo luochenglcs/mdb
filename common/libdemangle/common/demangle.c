@@ -19,7 +19,11 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
+#ifdef linux
+#include <ctype.h>
+#else
 #include <sys/ctype.h>
+#endif
 #include <sys/debug.h>
 #include <sys/sysmacros.h>
 #include <stdarg.h>
@@ -27,10 +31,17 @@
 #include "demangle_int.h"
 
 #define	DEMANGLE_DEBUG	"DEMANGLE_DEBUG"
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
+#endif
 
 static pthread_once_t debug_once = PTHREAD_ONCE_INIT;
 volatile boolean_t demangle_debug;
+#ifdef linux
+#define debugf	stderr
+#else 
 FILE *debugf = stderr;
+#endif
 
 static struct {
 	const char	*str;
@@ -161,8 +172,10 @@ sysdemangle(const char *str, sysdem_lang_t lang, sysdem_ops_t *ops)
 	switch (lang) {
 	case SYSDEM_LANG_CPP:
 		return (cpp_demangle(str, slen, ops));
+#ifdef __HAVE_RUST
 	case SYSDEM_LANG_RUST:
 		return (rust_demangle(str, slen, ops));
+#endif
 	case SYSDEM_LANG_AUTO:
 		DEMDEBUG("could not detect language");
 		errno = ENOTSUP;
