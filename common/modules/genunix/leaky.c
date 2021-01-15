@@ -118,6 +118,9 @@ leaky_verbose(char *str, uint64_t stat)
 static void
 leaky_verbose_perc(char *str, uint64_t stat, uint64_t total)
 {
+	if (total == 0)
+		return;
+
 	uint_t perc = (stat * 100) / total;
 	uint_t tenths = ((stat * 1000) / total) % 10;
 
@@ -127,13 +130,13 @@ leaky_verbose_perc(char *str, uint64_t stat, uint64_t total)
 	mdb_printf("findleaks: %*s => %-13lld (%2d.%1d%%)\n",
 	    30, str, stat, perc, tenths);
 }
-
+#define gethrvtime gethrtime
 static void
 leaky_verbose_begin(void)
 {
 	/* kmdb can't tell time */
 #ifndef _KMDB
-	extern hrtime_t gethrvtime(void);
+	//extern hrtime_t gethrvtime(void);
 	lk_begin = gethrtime();
 	lk_vbegin = gethrvtime();
 #endif
@@ -145,7 +148,7 @@ leaky_verbose_end(void)
 {
 	/* kmdb can't tell time */
 #ifndef _KMDB
-	extern hrtime_t gethrvtime(void);
+	//extern hrtime_t gethrvtime(void);
 
 	hrtime_t ts = gethrtime() - lk_begin;
 	hrtime_t sec = ts / (hrtime_t)NANOSEC;

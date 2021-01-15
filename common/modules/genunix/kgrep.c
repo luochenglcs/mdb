@@ -37,6 +37,8 @@
 #include "kgrep.h"
 
 #define	KGREP_FULL_MASK		(~(uintmax_t)0)
+#define P2ALIGN(x, align) ((x) & -(align))
+#define P2END(x, align)	(-(~(x) & -(align)))
 
 typedef struct kgrep_data {
 	uintmax_t kg_pattern;

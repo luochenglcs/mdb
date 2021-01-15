@@ -23,12 +23,12 @@
  * Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
-
+#include <stdint.h>
 #include <mdb/mdb_param.h>
 #include <mdb/mdb_modapi.h>
 
-#include <sys/fs/ufs_inode.h>
-#include <sys/kmem_impl.h>
+//#include <sys/fs/ufs_inode.h>
+//#include <sys/kmem_impl.h>
 #include <sys/vmem_impl.h>
 #include <sys/modctl.h>
 #include <sys/kobj.h>
