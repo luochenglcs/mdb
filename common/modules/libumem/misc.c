@@ -25,7 +25,7 @@
 
 #include "misc.h"
 
-#define	UMEM_OBJNAME "libumem.so.1"
+#define	UMEM_OBJNAME "libumem.so"
 
 int umem_debug_level = 0;
 int umem_is_standalone = 0;

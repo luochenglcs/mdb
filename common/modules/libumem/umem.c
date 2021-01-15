@@ -36,7 +36,9 @@
 #include <alloca.h>
 #include <limits.h>
 #include <mdb/mdb_whatis.h>
+#ifndef _HACK_LIBUMEM
 #include <thr_uberdata.h>
+#endif
 
 #include "misc.h"
 #include "leaky.h"
@@ -48,6 +50,8 @@
 #define	UM_FREE			0x2
 #define	UM_BUFCTL		0x4
 #define	UM_HASH			0x8
+
+#define NTMEMBASE	16
 
 int umem_ready;
 
@@ -125,8 +129,10 @@ umem_ptc_walk_step(mdb_walk_state_t *wsp)
 	int rval;
 
 	if (wsp->walk_layer != NULL) {
+#ifndef _HACK_LIBUMEM
 		this = (uintptr_t)((ulwp_t *)wsp->walk_layer)->ul_self +
 		    (uintptr_t)wsp->walk_arg;
+#endif
 	} else {
 		this = wsp->walk_addr + (uintptr_t)wsp->walk_arg;
 	}
@@ -171,9 +177,12 @@ umem_init_walkers(uintptr_t addr, const umem_cache_t *c, int *sizes)
 	if (mdb_add_walker(&w) == -1)
 		mdb_warn("failed to add %s walker", c->cache_name);
 
+#ifndef _HACK_LIBUMEM
 	if (!(c->cache_flags & UMF_PTC))
 		return (WALK_NEXT);
-
+#else
+	return (WALK_NEXT);
+#endif
 	/*
 	 * For the per-thread cache walker, the address is the offset in the
 	 * tm_roots[] array of the ulwp_t.
@@ -205,8 +214,9 @@ umem_init_walkers(uintptr_t addr, const umem_cache_t *c, int *sizes)
 	w.walk_init = umem_ptc_walk_init;
 	w.walk_step = umem_ptc_walk_step;
 	w.walk_fini = NULL;
+#ifndef _HACK_LIBUMEM
 	w.walk_init_arg = (void *)offsetof(ulwp_t, ul_tmem.tm_roots[i]);
-
+#endif
 	if (mdb_add_walker(&w) == -1)
 		mdb_warn("failed to add %s walker", w.walk_name);
 
@@ -336,7 +346,9 @@ umem_debug_flags_t umem_status_flags[] = {
 	{ "nosignal",	UMF_CHECKSIGNAL },
 	{ "firewall",	UMF_FIREWALL },
 	{ "lite",	UMF_LITE },
+#ifndef _HACK_LIBUMEM
 	{ "checknull",	UMF_CHECKNULL },
+#endif
 	{ NULL }
 };
 
@@ -1036,10 +1048,12 @@ umem_read_ptc(umem_cache_t *cp,
 	umem_read_ptc_walk_t urpw;
 	char walk[60];
 	int rval;
-
+#ifndef _HACK_LIBUMEM
 	if (!(cp->cache_flags & UMF_PTC))
 		return (0);
-
+#else
+	return (0);
+#endif
 	(void) mdb_snprintf(walk, sizeof (walk), "umem_ptc_%d",
 	    cp->cache_bufsize);
 
@@ -2336,10 +2350,12 @@ umem_init(void)
 	/*
 	 * Register our ::whatis callbacks.
 	 */
+#ifndef _HACK_LIBUMEM
 	mdb_whatis_register("umem", whatis_run_umem, NULL,
 	    WHATIS_PRIO_ALLOCATOR, WHATIS_REG_NO_ID);
 	mdb_whatis_register("vmem", whatis_run_vmem, NULL,
 	    WHATIS_PRIO_ALLOCATOR, WHATIS_REG_NO_ID);
+#endif
 
 	return (0);
 }

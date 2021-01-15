@@ -38,8 +38,9 @@
 
 #include <umem_impl.h>
 #include <sys/vmem_impl_user.h>
+#ifndef _HACK_LIBUMEM
 #include <thr_uberdata.h>
-
+#endif
 #include "umem_pagesize.h"
 
 typedef struct datafmt {
@@ -123,10 +124,11 @@ typedef struct umastat_vmem {
 static int
 umastat_cache_nptc(uintptr_t addr, const umem_cache_t *cp, int *nptc)
 {
+#ifndef _HACK_LIBUMEM
 	if (!(cp->cache_flags & UMF_PTC))
 		return (WALK_NEXT);
-
 	(*nptc)++;
+#endif
 	return (WALK_NEXT);
 }
 
@@ -134,9 +136,10 @@ umastat_cache_nptc(uintptr_t addr, const umem_cache_t *cp, int *nptc)
 static int
 umastat_cache_hdr(uintptr_t addr, const umem_cache_t *cp, void *ignored)
 {
+#ifndef _HACK_LIBUMEM
 	if (!(cp->cache_flags & UMF_PTC))
 		return (WALK_NEXT);
-
+#endif
 	mdb_printf("%3d ", cp->cache_bufsize);
 	return (WALK_NEXT);
 }
@@ -149,6 +152,7 @@ umastat_lwp_ptc(uintptr_t addr, void *buf, int *nbufs)
 	return (WALK_NEXT);
 }
 
+#ifndef _HACK_LIBUMEM
 /*ARGSUSED*/
 static int
 umastat_lwp_cache(uintptr_t addr, const umem_cache_t *cp, ulwp_t *ulwp)
@@ -201,6 +205,7 @@ umastat_lwp(uintptr_t addr, const ulwp_t *ulwp, void *ignored)
 
 	return (WALK_NEXT);
 }
+#endif
 
 /*ARGSUSED*/
 static int
@@ -235,7 +240,7 @@ umastat_cache(uintptr_t addr, const umem_cache_t *cp, umastat_vmem_t **kvp)
 	(void) mdb_pwalk("umem_cpu_cache", cpu_alloc, &alloc, addr);
 	(void) mdb_pwalk("umem_cpu_cache", cpu_avail, &avail, addr);
 	(void) mdb_pwalk("umem_slab_partial", slab_avail, &avail, addr);
-
+#ifndef _HACK_LIBUMEM
 	if (cp->cache_flags & UMF_PTC) {
 		char walk[60];
 
@@ -250,6 +255,7 @@ umastat_cache(uintptr_t addr, const umem_cache_t *cp, umastat_vmem_t **kvp)
 
 		(void) mdb_snprintf(buf, sizeof (buf), "%d", nptc);
 	}
+#endif
 
 	for (kv = *kvp; kv != NULL; kv = kv->kv_next) {
 		if (kv->kv_addr == (uintptr_t)cp->cache_arena)
@@ -268,7 +274,11 @@ out:
 	mdb_printf((dfp++)->fmt, cp->cache_name);
 	mdb_printf((dfp++)->fmt, cp->cache_bufsize);
 	mdb_printf((dfp++)->fmt, total - avail);
+#ifdef _HACK_LIBUMEM
+	mdb_printf((dfp++)->fmt, "-");
+#else
 	mdb_printf((dfp++)->fmt, cp->cache_flags & UMF_PTC ? buf : "-");
+#endif
 	mdb_printf((dfp++)->fmt, total);
 	mdb_printf((dfp++)->fmt, meminuse);
 	mdb_printf((dfp++)->fmt, alloc);
@@ -373,12 +383,12 @@ umastat(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
 			mdb_printf("%s ", dfp->dashes);
 
 		mdb_printf("\n");
-
+#ifndef _HACK_LIBUMEM
 		if (mdb_walk("ulwp", (mdb_walk_cb_t)umastat_lwp, NULL) == -1) {
 			mdb_warn("can't walk 'ulwp'");
 			return (DCMD_ERR);
 		}
-
+#endif
 		mdb_printf("\n");
 	}
 
@@ -593,7 +603,11 @@ static const mdb_walker_t walkers[] = {
 static const mdb_modinfo_t modinfo = {MDB_API_VERSION, dcmds, walkers};
 
 const mdb_modinfo_t *
+#ifdef _HACK_LIBUMEM
+libumem_mdb_init(void)
+#else
 _mdb_init(void)
+#endif
 {
 	if (umem_init() != 0)
 		return (NULL);
