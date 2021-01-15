@@ -40,6 +40,10 @@ extern "C" {
  */
 #define	DKL_MAGIC	0xDABE		/* magic number */
 #define	FKL_MAGIC	0xff		/* magic number for DOS floppies */
+#ifdef linux
+#define	NDKMAP		16		/* # of logical partitions */
+#define	DK_LABEL_LOC	1		/* location of disk label */
+#endif
 
 #if defined(_SUNOS_VTOC_16)
 #define	NDKMAP		16		/* # of logical partitions */
@@ -48,7 +52,7 @@ extern "C" {
 #define	NDKMAP		8		/* # of logical partitions */
 #define	DK_LABEL_LOC	0		/* location of disk label */
 #else
-#error "No VTOC format defined."
+//#error "No VTOC format defined."
 #endif
 
 #define	LEN_DKL_ASCII	128		/* length of dkl_asciilabel */
@@ -149,7 +153,7 @@ struct dk_vtoc {
 	uint32_t	v_reserved[10];		/* free space */
 	time32_t	v_timestamp[NDKMAP];	/* partition timestamp */
 #else
-#error "No VTOC format defined."
+//#error "No VTOC format defined."
 #endif
 };
 
@@ -171,7 +175,7 @@ struct dk_vtoc {
 			    (14 * (sizeof (uint16_t))) + \
 			    (2 * (sizeof (uint16_t)))))
 #else
-#error "No VTOC format defined."
+//#error "No VTOC format defined."
 #endif
 
 
@@ -212,7 +216,7 @@ struct dk_label {
 	uint16_t	dkl_obs4;	/* obsolete */
 	struct dk_map32	dkl_map[NDKMAP]; /* logical partition headers */
 #else
-#error "No VTOC format defined."
+//#error "No VTOC format defined."
 #endif
 	uint16_t	dkl_magic;	/* identifies this label format */
 	uint16_t	dkl_cksum;	/* xor checksum of sector */
@@ -232,7 +236,7 @@ struct dk_label {
 #define	dkl_bhead	dkl_obs3	/* used to be label head offset */
 #define	dkl_ppart	dkl_obs4	/* used to by physical partition */
 #else
-#error "No VTOC format defined."
+//#error "No VTOC format defined."
 #endif
 
 struct fk_label {			/* DOS floppy label */

@@ -34,12 +34,12 @@
 #define	_SYS_T_LOCK_H
 
 #ifndef	_ASM
-#include <sys/machlock.h>
+//#include <sys/machlock.h>
 #include <sys/param.h>
-#include <sys/mutex.h>
+//#include <sys/mutex.h>
 #include <sys/rwlock.h>
-#include <sys/semaphore.h>
-#include <sys/condvar.h>
+//#include <sys/semaphore.h>
+//#include <sys/condvar.h>
 #endif	/* _ASM */
 
 #ifdef	__cplusplus

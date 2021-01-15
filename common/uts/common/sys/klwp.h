@@ -115,8 +115,8 @@ typedef struct _klwp {
 	uchar_t lwp_extsig;		/* cursig sent from another contract */
 	stack_t lwp_sigaltstack;	/* alternate signal stack */
 	struct sigqueue *lwp_curinfo;	/* siginfo for current signal */
-	k_siginfo_t	lwp_siginfo;	/* siginfo for stop-on-fault */
-	k_sigset_t	lwp_sigoldmask;	/* for sigsuspend */
+	//k_siginfo_t	lwp_siginfo;	/* siginfo for stop-on-fault */
+	//k_sigset_t	lwp_sigoldmask;	/* for sigsuspend */
 	struct lwp_watch {		/* used in watchpoint single-stepping */
 		caddr_t	wpaddr;
 		size_t	wpsize;

@@ -52,7 +52,7 @@ typedef struct
 	} a_un;
 } auxv_t;
 
-#if defined(_SYSCALL32)
+//#if defined(_SYSCALL32)
 
 typedef struct {
 	int32_t	a_type;
@@ -63,7 +63,7 @@ typedef struct {
 	} a_un;
 } auxv32_t;
 
-#endif	/* _SYSCALL32 */
+//#endif	/* _SYSCALL32 */
 
 #endif /* _ASM */
 

@@ -58,13 +58,13 @@ extern "C" {
 #endif
 
 #if !defined(_ASM)
-
+#if 0
 #if defined(_LP64) || defined(_I32LPx)
 typedef long	greg_t;
 #else
 typedef int	greg_t;
 #endif
-
+#endif
 #if defined(_SYSCALL32)
 
 typedef int32_t greg32_t;
@@ -72,7 +72,9 @@ typedef int64_t	greg64_t;
 
 #endif	/* _SYSCALL32 */
 
+#if 0
 typedef greg_t	gregset_t[_NGREG];
+#endif
 
 #if defined(_SYSCALL32)
 
@@ -89,7 +91,7 @@ typedef	greg64_t gregset64_t[_NGREG64];
  */
 
 #if defined(__amd64)
-
+#if 0
 typedef struct _fpu {
 	union {
 		struct _fpchip_state {
@@ -114,7 +116,7 @@ typedef struct _fpu {
 		uint32_t	f_fpregs[130];
 	} fp_reg_set;
 } fpregset_t;
-
+#endif
 #else	/* __i386 */
 
 /*
@@ -168,11 +170,12 @@ typedef struct fpu32 {
  * Structure mcontext defines the complete hardware machine state.
  * (This structure is specified in the i386 ABI suppl.)
  */
+#if 0
 typedef struct {
 	gregset_t	gregs;		/* general register set */
 	fpregset_t	fpregs;		/* floating point register set */
 } mcontext_t;
-
+#endif
 #if defined(_SYSCALL32)
 
 typedef struct {

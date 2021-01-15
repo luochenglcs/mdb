@@ -28,7 +28,7 @@
 
 #if !defined(_ASM)
 #include <sys/types.h>
-#include <sys/thread.h>
+//#include <sys/thread.h>
 #include <sys/cpuvar.h>
 #endif	/* !_ASM */
 

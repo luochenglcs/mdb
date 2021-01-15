@@ -52,6 +52,21 @@ extern "C" {
  * production kernels.  VERIFY(ex), on the other hand, behaves like
  * ASSERT and is evaluated on both debug and non-debug kernels.
  */
+static inline int
+assfail(const char *a, const char *f, int l)
+{
+	printf("ASSERTION CAUGHT: %s, file %s, line: %d", a, f, l);
+	return 0;
+}
+
+static inline void
+assfail3(const char *a, uintmax_t lvm, const char *op, uintmax_t rv,
+	const char *f, int l)
+{
+	printf("ASSERTION CAUGHT: %s (0x%llx %s 0x%llx), file %s,"
+		"line: %d", a, (u_longlong_t)lvm, op, (u_longlong_t) rv,
+		f, l);
+}
 
 extern int assfail(const char *, const char *, int);
 #define	VERIFY(EX) ((void)((EX) || assfail(#EX, __FILE__, __LINE__)))

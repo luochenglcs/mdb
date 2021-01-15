@@ -146,10 +146,10 @@ typedef struct _kthread {
 	label_t	*t_onfault;	/* on_fault() setjmp buf */
 	struct on_trap_data *t_ontrap;	/* on_trap() protection data */
 	caddr_t t_swap;		/* the bottom of the stack, if from segkp */
-	lock_t	t_lock;		/* used to resume() a thread */
+	//lock_t	t_lock;		/* used to resume() a thread */
 	uint8_t	t_lockstat;	/* set while thread is in lockstat code */
 	uint8_t	t_pil;		/* interrupt thread PIL */
-	disp_lock_t	t_pi_lock;	/* lock protecting t_prioinv list */
+	//disp_lock_t	t_pi_lock;	/* lock protecting t_prioinv list */
 	char	t_nomigrate;	/* do not migrate if set */
 	struct cpu	*t_cpu;	/* CPU that thread last ran on */
 	struct cpu	*t_weakbound_cpu;	/* cpu weakly bound to */
@@ -168,10 +168,10 @@ typedef struct _kthread {
 	id_t		t_tid;		/* lwp's id */
 	id_t		t_waitfor;	/* target lwp id in lwp_wait() */
 	struct sigqueue	*t_sigqueue;	/* queue of siginfo structs */
-	k_sigset_t	t_sig;		/* signals pending to this process */
-	k_sigset_t	t_extsig;	/* signals sent from another contract */
-	k_sigset_t	t_hold;		/* hold signal bit mask */
-	k_sigset_t	t_sigwait;	/* sigtimedwait/sigfd accepting these */
+	//k_sigset_t	t_sig;		/* signals pending to this process */
+	//k_sigset_t	t_extsig;	/* signals sent from another contract */
+	//k_sigset_t	t_hold;		/* hold signal bit mask */
+	//k_sigset_t	t_sigwait;	/* sigtimedwait/sigfd accepting these */
 	struct	_kthread *t_forw;	/* process's forward thread link */
 	struct	_kthread *t_back;	/* process's backward thread link */
 	struct	_kthread *t_thlink;	/* tid (lwpid) lookup hash link */
@@ -200,10 +200,10 @@ typedef struct _kthread {
 	 * flags.  This pointer can change during waits on the lock, so
 	 * it should be grabbed only by thread_lock().
 	 */
-	disp_lock_t	*t_lockp;	/* pointer to the dispatcher lock */
+	//disp_lock_t	*t_lockp;	/* pointer to the dispatcher lock */
 	ushort_t	t_oldspl;	/* spl level before dispatcher locked */
 	volatile char	t_pre_sys;	/* pre-syscall work needed */
-	lock_t		t_lock_flush;	/* for lock_mutex_flush() impl */
+	//lock_t		t_lock_flush;	/* for lock_mutex_flush() impl */
 	struct _disp	*t_disp_queue;	/* run queue for chosen CPU */
 	clock_t		t_disp_time;	/* last time this thread was running */
 
