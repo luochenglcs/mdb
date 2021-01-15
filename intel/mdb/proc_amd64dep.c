@@ -43,6 +43,7 @@
 #include <mdb/mdb.h>
 
 #include <sys/ucontext.h>
+#include <sys/mcontext.h>
 #include <sys/frame.h>
 #include <libproc.h>
 #include <sys/fp.h>
@@ -511,6 +512,7 @@ pt_fpregs(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
 	mdb_tgt_t *t = mdb.m_target;
 	mdb_tgt_tid_t tid;
 	prfpregset_t fprs;
+#ifndef _HACK_MDB
 	struct _fpchip_state fps;
 	char buf[256];
 	uint_t top;
@@ -631,7 +633,7 @@ pt_fpregs(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
 		mdb_printf("%%xmm%d  0x%08x%08x%08x%08x\n", i,
 		    fps.xmm[i]._l[3], fps.xmm[i]._l[2],
 		    fps.xmm[i]._l[1], fps.xmm[i]._l[0]);
-
+#endif
 	return (DCMD_OK);
 }
 
