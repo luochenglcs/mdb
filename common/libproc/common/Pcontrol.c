@@ -54,7 +54,7 @@
 #include <sys/dtrace.h>
 #include <sys/ptrace.h>
 #include "../../include/ctl.h"
-#include "../../build/port.h" /* Shouldnt refer to build, but will do for now */
+//#include "../../build/port.h" /* Shouldnt refer to build, but will do for now */
 # endif
 
 
@@ -95,7 +95,7 @@ static	void	Lfree_internal(struct ps_prochandle *, struct ps_lwphandle *);
 static ssize_t
 Pread_live(struct ps_prochandle *P, void *buf, size_t n, uintptr_t addr)
 {
-# if linux
+#ifndef linux
 	static int fd = -1;
 	ctl_mem_t ctl;
 
@@ -891,11 +891,13 @@ Pcreate_error(int error)
  * attributes, or process group and session properties for each new victim.
  */
 /*ARGSUSED*/
+#ifndef _HACK_LIBPROC
 void
 Pcreate_callback(struct ps_prochandle *P)
 {
 	/* nothing to do here */
 }
+#endif
 
 /*
  * Grab an existing process.
@@ -1753,7 +1755,7 @@ printf("In Preopen\n");
 	}
 	P->statfd = fd;
 
-# if linux
+#ifndef linux
 	if ((fd = open("/dev/dtrace_ctl", O_RDWR)) < 0 ||
 	    close(P->ctlfd) < 0 ||
 	    (fd = dupfd(fd, P->ctlfd)) != P->ctlfd) {
@@ -2270,7 +2272,9 @@ Pstop(struct ps_prochandle *P, uint_t msec)
 int
 Pdstop(struct ps_prochandle *P)
 {
+#ifndef _HACK_LIBPROC
 HERE();
+#endif
 	return (Pstopstatus(P, PCDSTOP, 0));
 }
 

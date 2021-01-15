@@ -480,8 +480,9 @@ note_priv_info(struct ps_prochandle *P, size_t nbytes)
 		free(ppii);
 		return (-1);
 	}
-
+#ifndef _HACK_LIBPROC
 	P->core->core_privinfo = __priv_parse_info(ppii);
+#endif
 	P->core->core_ppii = ppii;
 	return (0);
 }
@@ -1282,7 +1283,11 @@ core_elf_close(elf_file_t *efp)
 		efp->e_fd = -1;
 	}
 }
-
+int
+elf_getphnum(Elf *elf, size_t *phnum)
+{
+	return (elf_getphdrnum(elf, phnum) == 0);
+}
 /*
  * Given an ELF file for a statically linked executable, locate the likely
  * primary text section and fill in rl_base with its virtual address.

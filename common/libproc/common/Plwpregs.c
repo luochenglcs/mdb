@@ -25,6 +25,10 @@
 
 #pragma ident	"@(#)Plwpregs.c	1.8	06/09/11 SMI"
 
+#ifdef _HACK_LIBPROC
+#include <sys/thread.h>
+#endif
+
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <string.h>
@@ -324,6 +328,40 @@ Plwp_setasrs(struct ps_prochandle *P, lwpid_t lwpid, const asrset_t asrs)
 }
 #endif	/* __sparcv9 */
 #endif	/* __sparc */
+
+int
+Plwp_getname(struct ps_prochandle *P, lwpid_t lwpid,
+    char *buf, size_t bufsize)
+{
+	char lwpname[THREAD_NAME_MAX];
+	char *from = NULL;
+	lwp_info_t *lwp;
+
+	if (P->state == PS_IDLE) {
+		errno = ENODATA;
+		return (-1);
+	}
+
+	if (P->state != PS_DEAD) {
+		if (getlwpfile(P, lwpid, "lwpname",
+			lwpname, sizeof (lwpname)) != 0)
+				return (-1);
+		from = lwpname;
+	} else {
+		if ((lwp = getlwpcore(P, lwpid)) == NULL)
+				return (-1);
+#ifndef _HACK_LIBPROC
+		from = lwp->lwp_name;
+#endif
+	}
+
+	if (strlcpy(buf, from, bufsize) >= bufsize) {
+		errno = ENAMETOOLONG;
+		return (-1);
+	}
+
+	return (0);
+}
 
 int
 Plwp_getpsinfo(struct ps_prochandle *P, lwpid_t lwpid, lwpsinfo_t *lps)

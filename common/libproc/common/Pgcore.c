@@ -237,7 +237,9 @@ mkprpsinfo(struct ps_prochandle *P, prpsinfo_t *psp)
 	psp->pr_pri = P->psinfo.pr_lwp.pr_pri;
 	psp->pr_oldpri = P->psinfo.pr_lwp.pr_oldpri;
 	psp->pr_cpu = P->psinfo.pr_lwp.pr_cpu;
+#ifndef _HACK_LIBPROC
 	psp->pr_ottydev = cmpdev(P->psinfo.pr_ttydev);
+#endif
 	psp->pr_lttydev = P->psinfo.pr_ttydev;
 	(void) strncpy(psp->pr_clname, P->psinfo.pr_lwp.pr_clname,
 	    sizeof (psp->pr_clname));
@@ -362,7 +364,9 @@ mkprpsinfo32(struct ps_prochandle *P, prpsinfo32_t *psp)
 	psp->pr_pri = P->psinfo.pr_lwp.pr_pri;
 	psp->pr_oldpri = P->psinfo.pr_lwp.pr_oldpri;
 	psp->pr_cpu = P->psinfo.pr_lwp.pr_cpu;
+#ifndef _HACK_LIBPROC
 	psp->pr_ottydev = cmpdev(P->psinfo.pr_ttydev);
+#endif
 	psp->pr_lttydev = prcmpldev(P->psinfo.pr_ttydev);
 	(void) strncpy(psp->pr_clname, P->psinfo.pr_lwp.pr_clname,
 	    sizeof (psp->pr_clname));
@@ -1333,9 +1337,10 @@ Pfgcore(struct ps_prochandle *P, int fd, core_content_t content)
 			goto err;
 		}
 		free(ppriv);
-
+#ifndef _HACK_LIBPROC
 		if ((pinfo = getprivimplinfo()) == NULL)
 			goto err;
+#endif
 		pinfosz = PRIV_IMPL_INFO_SIZE(pinfo);
 
 		if (write_note(fd, NT_PRPRIVINFO, pinfo, pinfosz, &doff) != 0)
@@ -1367,7 +1372,7 @@ Pfgcore(struct ps_prochandle *P, int fd, core_content_t content)
 				goto err;
 			}
 
-			free(ldtp);
+		free(ldtp);
 		}
 	}
 #endif	/* __i386 || __amd64 */

@@ -57,9 +57,11 @@ open_psinfo(const char *arg, int *perr)
 		(void) strcat(path, arg);
 	} else
 		(void) strcpy(path, arg);
-
+#ifdef linux
+	(void) strcat(path, "/stat");
+#else
 	(void) strcat(path, "/psinfo");
-
+#endif
 	/*
 	 * Attempt to open the psinfo file, and return the fd if we can
 	 * confirm this is a regular file provided by /proc.
@@ -153,8 +155,13 @@ proc_grab_common(const char *arg, const char *path, int oflag, int gflag,
 		*slash = '\0';
 		if ((oflag & PR_ARG_PIDS) &&
 		    (fd = open_psinfo(arg, perr)) != -1) {
+#ifdef _HACK_LIBPROC
+			if (read(fd, &psinfo, sizeof (psinfo_t))) {
+				psinfo.pr_pid = atoi(arg);
+#else
 			if (read(fd, &psinfo,
 			    sizeof (psinfo_t)) == sizeof (psinfo_t)) {
+#endif
 				(void) close(fd);
 				*lwps = slash + 1;
 				*slash = '/';
@@ -203,7 +210,12 @@ proc_grab_common(const char *arg, const char *path, int oflag, int gflag,
 	}
 
 	if ((oflag & PR_ARG_PIDS) && (fd = open_psinfo(arg, perr)) != -1) {
+#ifdef _HACK_LIBPROC
+		if (read(fd, &psinfo, sizeof (psinfo_t))) {
+			psinfo.pr_pid = atoi(arg);
+#else
 		if (read(fd, &psinfo, sizeof (psinfo_t)) == sizeof (psinfo_t)) {
+#endif
 			(void) close(fd);
 			if (psp) {
 				*psp = psinfo;

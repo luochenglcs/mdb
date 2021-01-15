@@ -48,6 +48,30 @@
  * form an absolute path, call resolvepath() on it, and then let the
  * caller's function do the final confirmation.
  */
+int resolvepath(const char* file, char* path, size_t size)
+{
+	register char* s;
+	register int   n;
+	register int   r;
+
+	r = *file != '/';
+	n = strlen(file) + r + 1;
+	if (n >= size) {
+		errno = ENOMEM;
+		return 0;
+	}
+	if (!r)
+		s = path;
+	else if (!getcwd(path, size - n))
+		return 0;
+	else {
+		s = path + strlen(path);
+		*s++ = '/';
+	}
+	strcpy(s, file);
+	return strlen(path);
+}
+
 static int
 try_exec(const char *cwd, const char *path, char *buf,
     int (*isexec)(const char *, void *), void *isdata)
@@ -134,10 +158,15 @@ Pfindexec(struct ps_prochandle *P, const char *aout,
 		    try_exec(cwd, p, buf, isexec, isdata))
 			goto found;
 
+#ifdef _HACK_LIBPROC
+			if (getzoneid() == GLOBAL_ZONEID &&
+		    pi->pr_zoneid != GLOBAL_ZONEID) {
+#else
 		if (getzoneid() == GLOBAL_ZONEID &&
 		    pi->pr_zoneid != GLOBAL_ZONEID &&
 		    zone_getattr(pi->pr_zoneid, ZONE_ATTR_ROOT, zpath,
 			sizeof (zpath)) != -1) {
+#endif
 			/*
 			 * try_exec() only combines its cwd and path arguments
 			 * if path is relative; but in our case even an absolute
@@ -265,8 +294,13 @@ Pexecname(struct ps_prochandle *P, char *buf, size_t buflen)
 		/*
 		 * Try to get the path information first.
 		 */
+#ifdef linux
+		(void) snprintf(exec_name, sizeof (exec_name),
+		    "%s/%d/exe", procfs_path, (int)P->pid);
+#else
 		(void) snprintf(exec_name, sizeof (exec_name),
 		    "%s/%d/path/a.out", procfs_path, (int)P->pid);
+#endif
 		if ((ret = readlink(exec_name, buf, buflen - 1)) > 0) {
 			buf[ret] = '\0';
 			return (buf);
@@ -276,9 +310,13 @@ Pexecname(struct ps_prochandle *P, char *buf, size_t buflen)
 		 * Stat the executable file so we can compare Pfindexec's
 		 * suggestions to the actual device and inode number.
 		 */
+#ifdef linux
+		(void) snprintf(exec_name, sizeof (exec_name),
+		    "%s/%d/exe", procfs_path, (int)P->pid);
+#else
 		(void) snprintf(exec_name, sizeof (exec_name),
 		    "%s/%d/object/a.out", procfs_path, (int)P->pid);
-
+#endif
 		if (stat64(exec_name, &st) != 0 || !S_ISREG(st.st_mode))
 			return (NULL);
 

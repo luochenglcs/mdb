@@ -2,12 +2,13 @@ ARFLAGS=Urv
 CC=gcc -g $(BUILD_BITS)
 CPPFLAGS += -I../common \
 	-I../../common/ctf \
-	-I../../uts/common/ \
+	-I../../uts/common \
+	-I../../uts/intel \
 	-I../../linux \
 	-I../../lib/libproc/common \
 	-I../../libctf \
 	-DCTF_OLD_VERSIONS $(PTR32)
-CPPFLAGS += -D_LARGEFILE_SOURCE=1 -D_FILE_OFFSET_BITS=64
+CPPFLAGS += -D_LARGEFILE_SOURCE=1 -D_FILE_OFFSET_BITS=64 -D_HACK_LIBPROC
 
 LIB = ../../$(BUILD_DIR)/libproc.a
 
@@ -59,5 +60,5 @@ $(LIB): \
 
 
 clean:
-	-rm -f *.o
+	-rm -f *.o $(LIB)
 	

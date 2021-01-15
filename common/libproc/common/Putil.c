@@ -149,8 +149,10 @@ p_dprintf(const char *format, ...)
  */
 /*ARGSUSED*/
 /*PRINTFLIKE2*/
+#ifndef _HACK_LIBPROC
 void
 Perror_printf(struct ps_prochandle *P, const char *format, ...)
 {
 	/* nothing to do here */
 }
+#endif
