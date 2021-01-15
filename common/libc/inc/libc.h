@@ -31,14 +31,18 @@
 
 #ifndef _LIBC_H
 #define	_LIBC_H
-
+#ifndef _HACK_LIBC
 #include <thread.h>
+#endif
 #include <stdio.h>
 #include <dirent.h>
 #include <ucontext.h>
+#ifndef _HACK_LIBC
 #include <nsswitch.h>
+#endif
 #include <stddef.h>
 #include <poll.h>
+#ifndef _HACK_LIBC
 #include <sys/dl.h>
 #include <sys/door.h>
 #include <sys/ieeefp.h>
@@ -51,7 +55,7 @@
 #include <wctype.h>
 #include <libnvpair.h>
 #include <setjmp.h>
-
+#endif
 #ifdef	__cplusplus
 extern "C" {
 #endif

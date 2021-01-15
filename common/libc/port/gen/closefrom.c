@@ -28,8 +28,9 @@
 
 #pragma weak _closefrom = closefrom
 #pragma weak _fdwalk = fdwalk
-
+#ifndef _HACK_LIBC
 #include "lint.h"
+#endif
 #include <ctype.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -58,7 +59,7 @@ fdwalk(int (*func)(void *, int), void *cd)
 	int max_fds = INT_MAX;
 	struct rlimit rl;
 	DIR *dirp;
-	struct dirent64 *dp;
+	struct dirent *dp;
 	int *fds;
 	size_t fds_sz;
 	int nfds;
@@ -72,10 +73,10 @@ fdwalk(int (*func)(void *, int), void *cd)
 		 * Collect all of the open file descriptors and close
 		 * the directory before calling 'func' on any of them.
 		 */
-		while ((dp = readdir64(dirp)) != NULL) {
+		while ((dp = readdir(dirp)) != NULL) {
 			/* skip '.', '..' and the opendir() fd */
 			if (!isdigit(dp->d_name[0]) ||
-			    (i = atoi(dp->d_name)) == dirp->dd_fd)
+			    (i = atoi(dp->d_name)) == dirfd(dirp))
 				continue;
 			if (fds_sz <= nfds * sizeof (int)) {
 				fds = memcpy(alloca(fds_sz * 2), fds, fds_sz);

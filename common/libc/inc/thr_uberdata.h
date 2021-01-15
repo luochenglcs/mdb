@@ -45,7 +45,9 @@
 #include <sys/resource.h>
 #include <sys/lwp.h>
 #include <errno.h>
+#ifndef _HACK_LIBC
 #include <sys/asm_linkage.h>
+#endif
 #include <sys/regset.h>
 #include <sys/fcntl.h>
 #include <sys/mman.h>

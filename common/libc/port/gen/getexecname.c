@@ -25,15 +25,21 @@
  */
 
 #pragma ident	"%Z%%M%	%I%	%E% SMI"
-
 #pragma weak _getexecname = getexecname
-
+#ifndef _HACK_LIBC
 #include "lint.h"
+#endif
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/auxv.h>
 
+#ifdef linux
+const char *getexecname(void)
+{
+	return ((const char *)(uintptr_t)getauxval(AT_EXECFN));
+}
+#else
 extern void *___getauxptr(int type);
 
 /*
@@ -45,3 +51,4 @@ getexecname(void)
 {
 	return ((const char *)___getauxptr(AT_SUN_EXECNAME));
 }
+#endif
