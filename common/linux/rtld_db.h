@@ -22,7 +22,7 @@
  * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
- 
+/* import from illumos-gate/usr/src/head/rtld_db.h   */
 # if !defined(RTLD_DB_H)
 # define	RTLD_DB_H
 
@@ -178,5 +178,31 @@ struct rd_agent {
 	uintptr_t			rda_addr;
 #endif
 };
+/*
+ * PLT skipping
+ */
+typedef enum {
+	RD_RESOLVE_NONE,            /* don't do anything special */
+	RD_RESOLVE_STEP,            /* step 'pi_nstep' instructions */
+	RD_RESOLVE_TARGET,          /* resolved target is in 'pi_target' */
+	RD_RESOLVE_TARGET_STEP      /* put a bpt on target, then step nstep times */
+} rd_skip_e;
 
+
+typedef struct rd_plt_info {
+	rd_skip_e       pi_skip_method;
+	long            pi_nstep;
+	psaddr_t        pi_target;
+	psaddr_t        pi_baddr;
+	unsigned int    pi_flags;
+} rd_plt_info_t;
+
+
+/*
+ * Values for pi_flags
+ */
+#define RD_FLG_PI_PLTBOUND      0x0001  /* Indicates that the PLT */
+                                        /* has been bound - and that */
+                                        /* pi_baddr will contain its */
+                                        /* destination address */
 # endif

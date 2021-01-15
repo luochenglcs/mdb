@@ -37,6 +37,6 @@ struct stat64_32 {
 #pragma pack()
 #endif
 
-struct stat64;
+//struct stat64;
 
 # endif

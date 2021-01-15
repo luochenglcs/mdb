@@ -9,6 +9,8 @@
 #define PR_MODEL_ILP32  1       /* process data model is ILP32 */
 #define PR_MODEL_LP64   2       /* process data model is LP64 */
 
+typedef uchar_t instr_t;
+
 #define NPRGREG 38
 #if defined(_LP64) || defined(_I32LPx)
 typedef long            prgreg_t;

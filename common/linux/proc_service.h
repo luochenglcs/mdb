@@ -1,3 +1,5 @@
+#include <sys/elf.h>
+
 typedef enum {
         PS_OK,          /* generic "call succeeded" */
         PS_ERR,         /* generic error */

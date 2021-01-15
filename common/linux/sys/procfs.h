@@ -496,6 +496,12 @@ typedef struct prwatch {
         int     pr_pad;
 } prwatch_t;
 
+/* pr_wflags */
+#define WA_READ         0x04    /* trap on read access */
+#define WA_WRITE        0x02    /* trap on write access */
+#define WA_EXEC         0x01    /* trap on execute access */
+#define WA_TRAPAFTER    0x08    /* trap after instruction completes */
+
 typedef struct {        /* return values from system call */
         long    sys_rval1;      /* primary return value from system call */
         long    sys_rval2;      /* second return value from system call */

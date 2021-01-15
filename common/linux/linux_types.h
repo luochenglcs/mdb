@@ -158,6 +158,10 @@ struct modctl;
 
 # include 	<sys/regset.h>
 
+typedef long long longlong_t;
+typedef unsigned long long u_longlong_t;
+typedef longlong_t diskaddr_t;
+
 #define 	DEFAULTMUTEX PTHREAD_MUTEX_INITIALIZER
 
 // fixme : objfs.h
@@ -388,8 +392,10 @@ typedef union {
 
 #define SIG2STR_MAX     32
 
-#define	B_TRUE	1
-#define	B_FALSE	0
+//#define	B_TRUE	1
+//#define	B_FALSE	0
+typedef enum boolean { B_FALSE, B_TRUE } boolean_t;
+
 # if !defined(TRUE)
 #	define	TRUE	1
 #	define	FALSE	0
@@ -580,7 +586,7 @@ extern int dtrace_assfail(const char *, const char *, int);
 int	dtrace_mach_aframes(void);
 
 extern int dtrace_here;
-extern unsigned long long gethrtime(void);
+//extern unsigned long long gethrtime(void);
 void *dtrace_casptr(void *target, void *cmp, void *new);
 #define	casptr(a, b, c) dtrace_casptr(a, b, c)
 

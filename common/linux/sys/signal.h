@@ -97,9 +97,9 @@
 #define SIGVTALRM	26
 #define SIGPROF		27
 #define SIGWINCH	28
-# if !defined(SIGIO)
+//# if !defined(SIGIO)
 #define SIGIO		29
-# endif
+//# endif
 #define SIGPOLL		SIGIO
 #define SIGCANCEL 36    /* reserved signal for thread cancellation */
 

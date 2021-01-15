@@ -55,7 +55,8 @@ typedef struct prstatus {
         ushort_t pr_nlwp;       /* Number of lwps in the process */
         sigset_t pr_sigpend;    /* Set of signals pending to the process */
         sigset_t pr_sighold;    /* Set of signals held (blocked) by the lwp */
-        struct  sigaltstack pr_altstack; /* Alternate signal stack info */
+        //struct  sigaltstack pr_altstack; /* Alternate signal stack info */
+	stack_t pr_altstack; /* Alternate signal stack info */
         struct  sigaction pr_action; /* Signal action for current signal */
         pid_t   pr_pid;         /* Process id */
         pid_t   pr_ppid;        /* Parent process id */
