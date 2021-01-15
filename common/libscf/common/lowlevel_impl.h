@@ -31,7 +31,9 @@
 #include "libscf_impl.h"
 
 #include <door.h>
+#ifndef _HACK_LIBSCF
 #include <libuutil.h>
+#endif
 #include <limits.h>
 #include <pthread.h>
 #include <stddef.h>
