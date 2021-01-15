@@ -50,6 +50,7 @@ static int _dis_errno;
 #if !defined(DIS_STANDALONE) || defined(__i386) || defined(__amd64)
 extern dis_arch_t dis_arch_i386;
 #endif
+#ifndef _HACK_LIBDISASM
 #if !defined(DIS_STANDALONE) || defined(__sparc)
 extern dis_arch_t dis_arch_sparc;
 #endif
@@ -59,11 +60,13 @@ extern dis_arch_t dis_arch_s390;
 #if !defined(DIS_STANDALONE) || defined(__riscv)
 extern dis_arch_t dis_arch_riscv;
 #endif
+#endif
 
 static dis_arch_t *dis_archs[] = {
 #if !defined(DIS_STANDALONE) || defined(__i386) || defined(__amd64)
 	&dis_arch_i386,
 #endif
+#ifndef _HACK_LIBDISASM
 #if !defined(DIS_STANDALONE) || defined(__sparc)
 	&dis_arch_sparc,
 #endif
@@ -72,6 +75,7 @@ static dis_arch_t *dis_archs[] = {
 #endif
 #if !defined(DIS_STANDALONE) || defined(__riscv)
 	&dis_arch_riscv,
+#endif
 #endif
 	NULL
 };

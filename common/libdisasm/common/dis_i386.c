@@ -148,13 +148,14 @@ dis_i386_disassemble(dis_handle_t *dhp, uint64_t addr, char *buf,
 	else
 		dhx->dhx_dis.d86_flags &= ~DIS_F_NOIMMSYM;
 
+#ifndef _HACK_LIBDISASM
 	if (dtrace_disx86(&dhx->dhx_dis, dhx->dhx_mode) != 0)
 		return (-1);
 
 	if (buf != NULL)
 		dtrace_disx86_str(&dhx->dhx_dis, dhx->dhx_mode, addr, buf,
 		    buflen);
-
+#endif
 	return (0);
 }
 
