@@ -34,6 +34,8 @@
 #include <ctf_impl.h>
 #include <stdlib.h>
 
+#define Z_ERRNO		(-1)
+#ifndef _HACK_LIBSTANDCTF
 /*ARGSUSED*/
 void *
 ctf_zopen(int *errp)
@@ -62,6 +64,7 @@ ctf_fdopen(int fd, int *errp)
 {
 	return (ctf_set_open_errno(errp, ENOTSUP));
 }
+#endif
 
 /*ARGSUSED*/
 ctf_file_t *
@@ -69,7 +72,7 @@ ctf_fdcreate_int(int fd, int *errp, ctf_sect_t *ctfp)
 {
 	return (ctf_set_open_errno(errp, ENOTSUP));
 }
-
+#ifndef _HACK_LIBSTANDCTF
 /*ARGSUSED*/
 ctf_file_t *
 ctf_open(const char *filename, int *errp)
@@ -87,6 +90,7 @@ ctf_version(int version)
 
 	return (_libctf_version);
 }
+#endif
 
 void *
 ctf_data_alloc(size_t size)
@@ -141,7 +145,7 @@ ctf_dprintf(const char *format, ...)
 	mdb_dvprintf(MDB_DBG_CTF, format, alist);
 	va_end(alist);
 }
-
+#ifndef _HACK_LIBSTANDCTF
 /*ARGSUSED*/
 int
 z_uncompress(void *dst, size_t *dstlen, const void *src, size_t srclen)
@@ -155,6 +159,7 @@ z_strerror(int err)
 {
 	return ("zlib unsupported in kmdb");
 }
+#endif
 
 int
 ctf_vsnprintf(char *buf, size_t nbytes, const char *format, va_list alist)
