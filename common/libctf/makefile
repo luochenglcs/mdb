@@ -1,9 +1,9 @@
 CC=gcc -g $(BUILD_BITS)
 COMMON = ../common/ctf
-CPPFLAGS += -I../common -I../common/ctf -I../uts/common/ \
-	-I$(COMMON) -I. \
+CPPFLAGS += -I. -I.. -I../common -I../common/ctf -I../uts/common/ -I$(COMMON) \
 	-I../linux -DCTF_OLD_VERSIONS $(PTR32)
-CPPFLAGS += -D_LARGEFILE_SOURCE=1 -D_LARGEFILE64_SOURCE=1 -D_FILE_OFFSET_BITS=64
+CPPFLAGS += -D_LARGEFILE_SOURCE=1 -D_LARGEFILE64_SOURCE=1 -D_FILE_OFFSET_BITS=64\
+		 -D_HACK_LIBCTF
 BINDIR = ../$(BUILD_DIR)
 ARFLAGS=Urv 
 
@@ -16,7 +16,8 @@ COMMON_OBJS = \
 	ctf_open.o \
 	ctf_types.o \
 	ctf_uncompress.o \
-	ctf_util.o
+	ctf_util.o \
+	ctf_decl.o
 
 all: $(BINDIR)/libctf.a
 	@/bin/true
@@ -33,7 +34,14 @@ $(BINDIR)/libctf.a: \
 	$(BINDIR)/libctf.a(ctf_open.o) \
 	$(BINDIR)/libctf.a(ctf_types.o) \
 	$(BINDIR)/libctf.a(uncompress.o) \
-	$(BINDIR)/libctf.a(ctf_util.o)
+	$(BINDIR)/libctf.a(ctf_util.o) \
+	$(BINDIR)/libctf.a(ctf_decl.o)
+
+$(BINDIR)/libctf.a(ctf_subr.o): $(COMMON)/../../libstandctf/ctf_subr.c
+	$(CC) -D_MDB -D_HACK_MDB -D_HACK_LIBSTANDCTF \
+	    -I$(COMMON)/../../libdemangle/common $(CPPFLAGS) -c $<
+	$(AR) $(ARFLAGS) $(BINDIR)/libctf.a ctf_subr.o
+	rm -f ctf_subr.o
 
 $(BINDIR)/libctf.a(ctf_create.o): $(COMMON)/ctf_create.c
 	$(CC) $(CPPFLAGS) -c $<
@@ -80,5 +88,10 @@ $(BINDIR)/libctf.a(ctf_util.o): $(COMMON)/ctf_util.c
 	$(AR) $(ARFLAGS) $(BINDIR)/libctf.a ctf_util.o
 	rm -f ctf_util.o
 
+$(BINDIR)/libctf.a(ctf_decl.o): $(COMMON)/ctf_decl.c
+	$(CC) $(CPPFLAGS) -c $<
+	$(AR) $(ARFLAGS) $(BINDIR)/libctf.a ctf_decl.o
+	rm -f ctf_decl.o
+
 clean:
-	-rm -f *.o *.a
+	-rm -f *.o $(BINDIR)/libctf.a
