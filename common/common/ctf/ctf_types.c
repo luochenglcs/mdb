@@ -32,6 +32,10 @@
 #include <ctf_impl.h>
 #include <sys/debug.h>
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x)	(sizeof(x) / sizeof(x[0]))
+#endif
+
 ssize_t
 ctf_get_ctt_size(const ctf_file_t *fp, const ctf_type_t *tp, ssize_t *sizep,
     ssize_t *incrementp)
@@ -1322,14 +1326,14 @@ ctf_kind_name(ctf_file_t *fp, int kind)
 		return ("unknown");
 	}
 }
-
+#ifndef _HACK_LIBCTF
 ctf_id_t
 ctf_max_id(ctf_file_t *fp)
 {
 	int child = (fp->ctf_flags & LCTF_CHILD);
 	return (fp->ctf_typemax + (child ? CTF_CHILD_START : 0));
 }
-
+#endif
 ulong_t
 ctf_nr_syms(ctf_file_t *fp)
 {
