@@ -28,6 +28,11 @@
  * Copyright 2019 Joyent, Inc.
  */
 
+#ifdef linux
+#include <asm-generic/ioctls.h>
+#include <stdlib.h>
+#endif
+
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/priocntl.h>
@@ -50,7 +55,9 @@
 #include <dlfcn.h>
 #include <libctf.h>
 #include <errno.h>
+#ifndef _HACK_MDB
 #include <kvm.h>
+#endif
 
 #include <mdb/mdb_lex.h>
 #include <mdb/mdb_debug.h>
@@ -360,7 +367,7 @@ mdb_scf_console_term(void)
 {
 	scf_simple_prop_t *prop;
 	char *term = NULL;
-
+#ifndef _HACK_MDB
 	if ((prop = scf_simple_prop_get(NULL,
 	    "svc:/system/console-login:default", "ttymon",
 	    "terminal_type")) == NULL)
@@ -371,6 +378,7 @@ mdb_scf_console_term(void)
 		term = strdup(term);
 
 	scf_simple_prop_free(prop);
+#endif
 	return (term);
 }
 
@@ -418,6 +426,20 @@ mdb_bhyve_tgt_create(mdb_tgt_t *t, int argc, const char *argv[])
 	return (set_errno(EINVAL));
 }
 #endif
+
+extern const char *getexecname(void);
+
+void _initialize_libumem(void)
+{
+	mdb.m_term = NULL;
+	mdb.m_log = NULL;
+	mdb.m_flags |= MDB_FL_DEMANGLE;
+
+	mdb.m_lmod = mdb_module_load_builtin("libumem"); //hack, now don't use mdb framework
+}
+
+
+
 
 int
 main(int argc, char *argv[], char *envp[])
@@ -530,10 +552,12 @@ main(int argc, char *argv[], char *envp[])
 		while ((c = getopt(argc, argv,
 		    "be:fkmo:p:s:uwyACD:FI:KL:MOP:R:SUV:W")) != (int)EOF) {
 			switch (c) {
+#ifdef _MDB_KVM
 			case 'b':
 				bflag++;
 				tgt_ctor = mdb_bhyve_tgt_create;
 				break;
+#endif
 			case 'e':
 				if (eflag != NULL) {
 					warn("-e already specified\n");
@@ -545,9 +569,11 @@ main(int argc, char *argv[], char *envp[])
 				fflag++;
 				tgt_ctor = mdb_rawfile_tgt_create;
 				break;
+#ifdef _MDB_KVM
 			case 'k':
 				tgt_ctor = mdb_kvm_tgt_create;
 				break;
+#endif
 			case 'm':
 				mdb.m_tgtflags |= MDB_TGT_F_NOLOAD;
 				mdb.m_tgtflags &= ~MDB_TGT_F_PRELOAD;
@@ -789,7 +815,7 @@ main(int argc, char *argv[], char *envp[])
 
 	if (mdb_get_prompt() == NULL && !(mdb.m_flags & MDB_FL_ADB))
 		(void) mdb_set_prompt(MDB_DEF_PROMPT);
-
+#ifdef _MDB_KVM
 	if (tgt_ctor == mdb_kvm_tgt_create) {
 		if (pidarg != NULL) {
 			warn("-p and -k options are mutually exclusive\n");
@@ -805,7 +831,7 @@ main(int argc, char *argv[], char *envp[])
 				tgt_argv[tgt_argc++] = "/dev/kmem";
 		}
 	}
-
+#endif
 	if (pidarg != NULL) {
 		if (tgt_argc != 0) {
 			warn("-p may not be used with other arguments\n");
@@ -815,12 +841,17 @@ main(int argc, char *argv[], char *envp[])
 			die("cannot attach to %s: %s\n",
 			    pidarg, Pgrab_error(status));
 		}
+#ifdef linux
+		(void) mdb_iob_snprintf(object, MAXPATHLEN,
+			"/proc/%s/exe", pidarg);
+#else
 		if (strchr(pidarg, '/') != NULL)
 			(void) mdb_iob_snprintf(object, MAXPATHLEN,
 			    "%s/object/a.out", pidarg);
 		else
 			(void) mdb_iob_snprintf(object, MAXPATHLEN,
 			    "/proc/%s/object/a.out", pidarg);
+#endif
 		tgt_argv[tgt_argc++] = object;
 		tgt_argv[tgt_argc++] = pidarg;
 	}
@@ -908,7 +939,7 @@ main(int argc, char *argv[], char *envp[])
 		if ((io = mdb_fdio_create_path(NULL, tgt_argv[0],
 		    O_RDONLY, 0)) == NULL)
 			die("failed to open %s", tgt_argv[0]);
-
+#ifdef _MDB_KVM
 		if (tgt_argc == 1) {
 			if (mdb_kvm_is_compressed_dump(io)) {
 				/*
@@ -930,7 +961,7 @@ main(int argc, char *argv[], char *envp[])
 				tgt_argv[tgt_argc++] = tgt_argv[0];
 			}
 		}
-
+#endif
 		/*
 		 * If the target is unknown or is not the rawfile target, do
 		 * a gelf_check to determine if the file is an ELF file.  If
@@ -956,7 +987,9 @@ main(int argc, char *argv[], char *envp[])
 			if (longmode)
 				goto reexec;
 #endif
+#ifdef _MDB_KVM
 			tgt_ctor = mdb_kvm_tgt_create;
+#endif
 			goto tcreate;
 		}
 
@@ -988,17 +1021,20 @@ main(int argc, char *argv[], char *envp[])
 				if ((io = mdb_fdio_create_path(NULL,
 				    tgt_argv[2], O_RDONLY, 0)) == NULL)
 					die("failed to open %s", tgt_argv[2]);
+#ifdef _MDB_KVM
 				if (mdb_kvm_is_compressed_dump(io))
 					tgt_argv[--tgt_argc] = NULL;
+#endif
 				mdb_io_destroy(io);
 			}
 
 			if ((io = mdb_fdio_create_path(NULL, tgt_argv[1],
 			    O_RDONLY, 0)) == NULL)
 				die("failed to open %s", tgt_argv[1]);
-
+#ifdef _MDB_KVM
 			if (mdb_gelf_check(io, &chdr, ET_NONE) == -1)
 				tgt_ctor = mdb_kvm_tgt_create;
+#endif
 
 			mdb_io_destroy(io);
 		}
@@ -1046,6 +1082,7 @@ tcreate:
 	 * If the target was successfully constructed and -O was specified,
 	 * we now attempt to enter piggy-mode for debugging jurassic problems.
 	 */
+#ifndef _HACK_MDB
 	if (Oflag) {
 		pcinfo_t pci;
 
@@ -1079,7 +1116,7 @@ tcreate:
 		if (Oflag)
 			mdb_printf("%s: oink, oink!\n", mdb.m_pname);
 	}
-
+#endif
 	/*
 	 * Path evaluation part 2: Re-evaluate the path now that the target
 	 * is ready (and thus we have access to the real platform string).
@@ -1088,7 +1125,7 @@ tcreate:
 	 */
 	mdb_set_ipath(mdb.m_ipathstr);
 	mdb_set_lpath(mdb.m_lpathstr);
-
+	_initialize_libumem(); //hack libumem
 	if (!Sflag && (p = getenv("HOME")) != NULL) {
 		char rcpath[MAXPATHLEN];
 		mdb_io_t *rc_io;

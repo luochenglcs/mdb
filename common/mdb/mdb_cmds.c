@@ -32,8 +32,12 @@
  * Copyright 2018 OmniOS Community Edition (OmniOSce) Association.
  */
 
+#ifdef linux
+#include <elf.h>
+#else
 #include <sys/elf.h>
 #include <sys/elf_SPARC.h>
+#endif
 
 #include <libproc.h>
 #include <stdlib.h>

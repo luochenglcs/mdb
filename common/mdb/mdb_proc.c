@@ -96,6 +96,11 @@
 #include <mdb/mdb_types.h>
 #include <mdb/mdb.h>
 
+#ifdef _HACK_MDB
+#include <sys/thread.h>
+#include <sys_link.h>
+#endif
+
 #include <sys/utsname.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -104,10 +109,15 @@
 #include <stdio_ext.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _HACK_MDB
 #include <ctype.h>
+#endif
 
 #define	PC_FAKE		-1UL			/* illegal pc value unequal 0 */
 #define	PANIC_BUFSIZE	1024
+#ifdef _HACK_MDB
+#define _SC_SIGRT_MAX		41
+#endif
 
 static const char PT_EXEC_PATH[] = "a.out";	/* Default executable */
 static const char PT_CORE_PATH[] = "core";	/* Default core file */
@@ -1556,9 +1566,11 @@ pt_print_reason(const lwpstatus_t *psp)
 			default:
 				desc = "unknown";
 			}
+#ifndef _HACK_MDB
 			mdb_printf("stopped %s a watchpoint (%s access to %p)",
 			    psp->pr_info.si_trapafter ? "after" : "on",
 			    desc, psp->pr_info.si_addr);
+#endif
 		} else if (psp->pr_what == FLTTRACE) {
 			mdb_printf("stopped after a single-step");
 		} else {
@@ -1576,6 +1588,7 @@ pt_print_reason(const lwpstatus_t *psp)
 	}
 }
 
+#ifndef _HACK_MDB
 static void
 pt_status_dcmd_upanic(prupanic_t *pru)
 {
@@ -1607,7 +1620,7 @@ pt_status_dcmd_upanic(prupanic_t *pru)
 	}
 	mdb_printf("\n");
 }
-
+#endif
 /*ARGSUSED*/
 static int
 pt_status_dcmd(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
@@ -1625,8 +1638,9 @@ pt_status_dcmd(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
 		uintptr_t panicstr;
 		char *panicbuf = mdb_alloc(PANIC_BUFSIZE, UM_SLEEP);
 		const siginfo_t *sip = &(psp->pr_lwp.pr_info);
+#ifndef _HACK_MDB
 		prupanic_t *pru = NULL;
-
+#endif
 		char execname[MAXPATHLEN], buf[BUFSIZ];
 		char signame[SIG2STR_MAX + 4]; /* enough for SIG+name+\0 */
 
@@ -1731,7 +1745,7 @@ pt_status_dcmd(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
 		case PS_DEAD:
 			if (cursig == 0 && WIFSIGNALED(pi.pr_wstat))
 				cursig = WTERMSIG(pi.pr_wstat);
-
+#ifndef _HACK_MDB
 			(void) Pupanic(P, &pru);
 
 			/*
@@ -1744,6 +1758,9 @@ pt_status_dcmd(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
 				pt_status_dcmd_upanic(pru);
 				Pupanic_free(pru);
 			} else if (pi.pr_wstat == 0 && Pstate(P) == PS_DEAD &&
+#else
+			if (pi.pr_wstat == 0 && Pstate(P) == PS_DEAD &&
+#endif
 			    Pcred(P, &cred, 1) == 0) {
 				mdb_printf("process core file generated "
 				    "with gcore(1)\n");
@@ -2699,7 +2716,11 @@ pt_lookup_by_name_thr(mdb_tgt_t *t, const char *object,
 		pl.pl_found = FALSE;
 
 		if (object == MDB_TGT_OBJ_EVERY) {
+#ifdef _LIBPROC_OLD
+			if (Pobject_iter(P, pt_lookup_cb, &pl) == -1)
+#else
 			if (Pobject_iter_resolved(P, pt_lookup_cb, &pl) == -1)
+#endif
 				return (-1); /* errno is set for us */
 			if ((!pl.pl_found) &&
 			    (Pobject_iter(P, pt_lookup_cb, &pl) == -1))
@@ -2875,11 +2896,17 @@ pt_lookup_by_addr(mdb_tgt_t *t, uintptr_t addr, uint_t flags,
 		const rd_loadobj_t *rlp;
 		rd_agent_t *rap;
 
+#ifdef _LIBRTLD_DB
 		if ((rap = Prd_agent(P)) != NULL &&
 		    (rlp = Paddr_to_loadobj(P, addr)) != NULL &&
 		    rd_plt_resolution(rap, addr, Pstatus(P)->pr_lwp.pr_lwpid,
 		    rlp->rl_plt_base, &rpi) == RD_OK &&
 		    (rpi.pi_flags & RD_FLG_PI_PLTBOUND)) {
+#else
+		if ((rap = Prd_agent(P)) != NULL &&
+		    (rlp = Paddr_to_loadobj(P, addr)) != NULL &&
+		    (rpi.pi_flags & RD_FLG_PI_PLTBOUND)) {
+#endif
 			size_t n;
 			n = mdb_iob_snprintf(buf, nbytes, "PLT=");
 			addr = rpi.pi_baddr;
@@ -2906,8 +2933,13 @@ pt_lookup_by_addr(mdb_tgt_t *t, uintptr_t addr, uint_t flags,
 	 * smart-mode or absolute distance check ourself:
 	 */
 	if (PT_LIBPROC_RESOLVE(P)) {
+#ifdef _LIBPROC_OLD
+		rv = Pxlookup_by_addr(P, addr, buf, nbytes,
+		    symp, &si);
+#else
 		rv = Pxlookup_by_addr_resolved(P, addr, buf, nbytes,
 		    symp, &si);
+#endif
 	} else {
 		rv = Pxlookup_by_addr(P, addr, buf, nbytes,
 		    symp, &si);
@@ -2951,8 +2983,12 @@ found:
 		Lmid_t lmid;
 
 		if (PT_LIBPROC_RESOLVE(P)) {
+#ifdef _LIBPROC_OLD
+			if (Pobjname(P, addr, pt->p_objname, MDB_TGT_MAPSZ))
+#else
 			if (Pobjname_resolved(P, addr, pt->p_objname,
 			    MDB_TGT_MAPSZ))
+#endif
 				prefix = pt->p_objname;
 		} else {
 			if (Pobjname(P, addr, pt->p_objname, MDB_TGT_MAPSZ))
@@ -3053,8 +3089,13 @@ pt_symbol_iter(mdb_tgt_t *t, const char *object, uint_t which,
 			return (0);
 		} else if (Prd_agent(t->t_pshandle) != NULL) {
 			if (PT_LIBPROC_RESOLVE(t->t_pshandle)) {
+#ifdef _LIBPROC_OLD
+				(void) Pobject_iter(t->t_pshandle,
+				    pt_objsym_iter, &ps);
+#else
 				(void) Pobject_iter_resolved(t->t_pshandle,
 				    pt_objsym_iter, &ps);
+#endif
 			} else {
 				(void) Pobject_iter(t->t_pshandle,
 				    pt_objsym_iter, &ps);
@@ -3092,7 +3133,11 @@ pt_prmap_to_mdbmap(mdb_tgt_t *t, const prmap_t *prp, mdb_map_t *mp)
 	Lmid_t lmid;
 
 	if (PT_LIBPROC_RESOLVE(P)) {
+#ifdef _LIBPROC_OLD
+		rv = Pobjname(P, prp->pr_vaddr, name, sizeof (name));
+#else
 		rv = Pobjname_resolved(P, prp->pr_vaddr, name, sizeof (name));
+#endif
 	} else {
 		rv = Pobjname(P, prp->pr_vaddr, name, sizeof (name));
 	}
@@ -3158,8 +3203,13 @@ pt_mapping_iter(mdb_tgt_t *t, mdb_tgt_map_f *func, void *private)
 		pm.pmap_private = private;
 
 		if (PT_LIBPROC_RESOLVE(t->t_pshandle)) {
+#ifdef _LIBPROC_OLD
+			(void) Pmapping_iter(t->t_pshandle,
+			    pt_map_apply, &pm);
+#else
 			(void) Pmapping_iter_resolved(t->t_pshandle,
 			    pt_map_apply, &pm);
+#endif
 		} else {
 			(void) Pmapping_iter(t->t_pshandle,
 			    pt_map_apply, &pm);
@@ -3187,8 +3237,13 @@ pt_object_iter(mdb_tgt_t *t, mdb_tgt_map_f *func, void *private)
 		pm.pmap_private = private;
 
 		if (PT_LIBPROC_RESOLVE(t->t_pshandle)) {
+#ifdef _LIBPROC_OLD
+			(void) Pobject_iter(t->t_pshandle,
+			    pt_map_apply, &pm);
+#else
 			(void) Pobject_iter_resolved(t->t_pshandle,
 			    pt_map_apply, &pm);
+#endif
 		} else {
 			(void) Pobject_iter(t->t_pshandle,
 			    pt_map_apply, &pm);
@@ -3372,7 +3427,9 @@ pt_dupfd(const char *file, int oflags, mode_t mode, int dfd)
 	int fd;
 
 	if ((fd = open(file, oflags, mode)) >= 0) {
+#ifndef _HACK_MDB
 		(void) fcntl(fd, F_DUP2FD, dfd);
+#endif
 		(void) close(fd);
 	} else
 		warn("failed to open %s as descriptor %d", file, dfd);
@@ -4335,9 +4392,10 @@ pt_wapt_cont(mdb_tgt_t *t, mdb_sespec_t *sep, mdb_tgt_status_t *tsp)
 	 * makes any sense to continue over this instruction.  We return as if
 	 * we continued normally.
 	 */
+#ifndef _HACK_MDB
 	if ((uintptr_t)psp->pr_info.si_pc != psp->pr_reg[R_PC])
 		return (pt_status(t, tsp));
-
+#endif
 	if (psp->pr_info.si_code != TRAP_XWATCH) {
 		for (bep = mdb_list_next(&t->t_active); bep != NULL;
 		    bep = mdb_list_next(bep)) {
@@ -5377,7 +5435,9 @@ mdb_proc_tgt_create(mdb_tgt_t *t, int argc, const char *argv[])
 	if (getrlimit(RLIMIT_NOFILE, &rlim) == 0) {
 		rlim.rlim_cur = rlim.rlim_max;
 		(void) setrlimit(RLIMIT_NOFILE, &rlim);
+#ifndef _HACK_MDB
 		(void) enable_extended_FILE_stdio(-1, -1);
+#endif
 	}
 
 	/*
@@ -5388,14 +5448,25 @@ mdb_proc_tgt_create(mdb_tgt_t *t, int argc, const char *argv[])
 	 * writing because /proc/object/<file> permission are masked with 0555.
 	 * If Pexecname() fails us, fall back to /proc/<pid>/object/a.out.
 	 */
+#ifdef _HACK_MDB
+	if (t->t_pshandle != NULL && (aout_path == NULL || (stat64(aout_path,
+	    &st) == 0))) {
+#else
 	if (t->t_pshandle != NULL && (aout_path == NULL || (stat64(aout_path,
 	    &st) == 0 && strcmp(st.st_fstype, "proc") == 0))) {
+#endif
 		GElf_Sym s;
 		aout_path = Pexecname(t->t_pshandle, execname, MAXPATHLEN);
 		if (aout_path == NULL && state != PS_DEAD && state != PS_IDLE) {
+#ifdef linux
+			(void) mdb_iob_snprintf(execname, sizeof (execname),
+			    "/proc/%d/exe",
+			    (int)Pstatus(t->t_pshandle)->pr_pid);
+#else
 			(void) mdb_iob_snprintf(execname, sizeof (execname),
 			    "/proc/%d/object/a.out",
 			    (int)Pstatus(t->t_pshandle)->pr_pid);
+#endif
 			aout_path = execname;
 		}
 		if (aout_path == NULL &&

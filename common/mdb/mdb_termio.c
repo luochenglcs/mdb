@@ -70,6 +70,11 @@
 #include <stdlib.h>
 #include <limits.h>
 
+#ifdef _HACK_MDB
+#include <sys_termios.h>
+#include <linux/termios.h>
+#endif
+
 #include <mdb/mdb_types.h>
 #include <mdb/mdb_cmdbuf.h>
 #include <mdb/mdb_err.h>
@@ -89,6 +94,8 @@
 #endif
 
 #include <curses.h>
+
+#define CTRL(c)	((c)&037)
 
 #define	KEY_ESC	(0x01b)			/* Escape key code */
 #define	KEY_DEL (0x07f)			/* ASCII DEL key code */
@@ -312,7 +319,9 @@ static const char *termio_susp(termio_data_t *, int);
 static void termio_winch(int, siginfo_t *, ucontext_t *, void *);
 static void termio_tstp(int, siginfo_t *, ucontext_t *, void *);
 
+#ifndef linux
 extern const char *tigetstr(const char *);
+#endif
 extern int tigetflag(const char *);
 extern int tigetnum(const char *);
 
@@ -787,14 +796,14 @@ termio_resume_tty(termio_data_t *td, struct termios *iosp)
 	 */
 	if (termio_ctl(td->tio_io, TCGETS, iosp) < 0)
 		warn("failed to get terminal attributes");
-
+#ifndef _HACK_MDB
 	if (termio_ctl(td->tio_io, TIOCGWINSZ, &winsz) == 0) {
 		if (winsz.ws_row != 0)
 			td->tio_rows = (size_t)winsz.ws_row;
 		if (winsz.ws_col != 0)
 			td->tio_cols = (size_t)winsz.ws_col;
 	}
-
+#endif
 	mdb_iob_resize(td->tio_out, td->tio_rows, td->tio_cols);
 
 	td->tio_intr = td->tio_ptios.c_cc[VINTR];
@@ -2029,10 +2038,10 @@ termio_abort(termio_data_t *td, int c, int err)
 	(void) mdb_cmdbuf_reset(&td->tio_cmdbuf, c);
 	td->tio_active = FALSE;
 	td->tio_rti_on = FALSE;
-
+#ifndef _HACK_MDB
 	if (termio_ctl(td->tio_io, TCSETSW, &td->tio_dtios) == -1)
 		warn("failed to restore terminal attributes");
-
+#endif
 	longjmp(mdb.m_frame->f_pcb, err);
 	/*NOTREACHED*/
 	return (NULL);
@@ -2087,7 +2096,7 @@ termio_winch(int sig, siginfo_t *sip, ucontext_t *ucp, void *data)
 	termio_data_t *td = data;
 	mdb_bool_t change = FALSE;
 	struct winsize winsz;
-
+#ifndef _HACK_MDB
 	if (termio_ctl(td->tio_io, TIOCGWINSZ, &winsz) == -1)
 		return; /* just ignore this WINCH if the ioctl fails */
 
@@ -2109,7 +2118,7 @@ termio_winch(int sig, siginfo_t *sip, ucontext_t *ucp, void *data)
 		mdb_iob_resize(td->tio_out, td->tio_rows, td->tio_cols);
 		change = TRUE;
 	}
-
+#endif
 	if (change && td->tio_active)
 		siglongjmp(td->tio_env, sig);
 

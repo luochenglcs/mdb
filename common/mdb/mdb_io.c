@@ -536,8 +536,9 @@ mdb_iob_resize(mdb_iob_t *iob, size_t rows, size_t cols)
 void
 mdb_iob_setpager(mdb_iob_t *iob, mdb_io_t *pgio)
 {
+#ifndef _HACK_MDB
 	struct winsize winsz;
-
+#endif
 	if (iob->iob_pgp != NULL) {
 		IOP_UNLINK(iob->iob_pgp, iob);
 		mdb_io_rele(iob->iob_pgp);
@@ -548,9 +549,10 @@ mdb_iob_setpager(mdb_iob_t *iob, mdb_io_t *pgio)
 	iob->iob_pgp = mdb_io_hold(pgio);
 
 	IOP_LINK(iob->iob_pgp, iob);
-
+#ifndef _HACK_MDB
 	if (IOP_CTL(pgio, TIOCGWINSZ, &winsz) == 0)
 		mdb_iob_resize(iob, (size_t)winsz.ws_row, (size_t)winsz.ws_col);
+#endif
 }
 
 void

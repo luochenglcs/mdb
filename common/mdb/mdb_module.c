@@ -28,7 +28,9 @@
 #include <sys/param.h>
 #include <unistd.h>
 #include <strings.h>
+#ifndef _HACK_MDB
 #include <dlfcn.h>
+#endif
 #include <link.h>
 
 #include <mdb/mdb_module.h>
@@ -37,7 +39,9 @@
 #include <mdb/mdb_debug.h>
 #include <mdb/mdb_callb.h>
 #include <mdb/mdb_string.h>
+#ifndef _HACK_MDB
 #include <mdb/mdb_ks.h>
+#endif
 #include <mdb/mdb_err.h>
 #include <mdb/mdb_io.h>
 #include <mdb/mdb_frame.h>
@@ -157,6 +161,11 @@ mdb_module_create(const char *name, const char *fname, int mode,
 		else
 #endif
 			mod->mod_init = builtin_init;
+#ifdef _HACK_LIBUMEM
+		extern const mdb_modinfo_t *libumem_mdb_init(void);
+		if (strcmp(name, "libumem") == 0) //hack libumem
+			mod->mod_init = libumem_mdb_init;
+#endif
 	}
 
 	if (mod->mod_init == NULL) {

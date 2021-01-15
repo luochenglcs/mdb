@@ -44,7 +44,7 @@ extern "C" {
 #endif
 
 #ifdef _MDB
-
+extern const char *getexecname(void);
 /*
  * The proc target must provide support for examining multi-threaded processes
  * that use the raw LWP interface, as well as those that use either of the

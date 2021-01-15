@@ -33,7 +33,9 @@
 #include <sys/types.h>
 #include <sys/int_types.h>
 #include <sys/stream.h>
+#ifndef _HACK_MDB
 #include <sys/vnode.h>
+#endif
 #include <sys/proc.h>
 #include <sys/dumphdr.h>
 #include <sys/auxv.h>

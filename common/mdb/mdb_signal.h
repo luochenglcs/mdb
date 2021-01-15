@@ -32,8 +32,11 @@
 #ifdef	__cplusplus
 extern "C" {
 #endif
-
+#ifdef _HACK_MDB
+#include <sys/linux-ucontext.h>
+#else
 #include <ucontext.h>
+#endif
 #include <signal.h>
 
 typedef void mdb_signal_f(int, siginfo_t *, ucontext_t *, void *);

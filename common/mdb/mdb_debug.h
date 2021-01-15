@@ -34,6 +34,10 @@ extern "C" {
 #include <sys/types.h>
 #include <stdarg.h>
 
+#ifdef linux
+#define RTLD_SELF	（(void *) -3） /* look in `ourself` */
+#endif
+
 #define	MDB_DBG_CMDBUF	0x00000001
 #define	MDB_DBG_PARSER	0x00000002
 #define	MDB_DBG_HELP	0x00000004

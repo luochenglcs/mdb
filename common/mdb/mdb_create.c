@@ -41,22 +41,24 @@ void
 mdb_create_builtin_tgts(void)
 {
 	mdb_module_t *mp;
-
+#ifdef _MDB_KVM
 	if ((mp = mdb_module_load_builtin("mdb_kvm")) != NULL)
 		mp->mod_tgt_ctor = mdb_kvm_tgt_create;
-
+#endif
 	if ((mp = mdb_module_load_builtin("mdb_proc")) != NULL)
 		mp->mod_tgt_ctor = mdb_proc_tgt_create;
-
+#ifdef _MDB_KVM
 	if ((mp = mdb_module_load_builtin("mdb_kproc")) != NULL)
 		mp->mod_tgt_ctor = mdb_kproc_tgt_create;
-
+#endif
 	if ((mp = mdb_module_load_builtin("mdb_raw")) != NULL)
 		mp->mod_tgt_ctor = mdb_rawfile_tgt_create;
 
 #ifdef __amd64
+#ifdef _MDB_KVM
 	if ((mp = mdb_module_load_builtin("mdb_bhyve")) != NULL)
 		mp->mod_tgt_ctor = mdb_bhyve_tgt_create;
+#endif
 #endif
 }
 

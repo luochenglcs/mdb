@@ -28,7 +28,9 @@
  */
 
 #include <sys/elf.h>
+#ifndef linux
 #include <sys/elf_SPARC.h>
+#endif
 
 #include <libproc.h>
 #include <libctf.h>
@@ -83,7 +85,9 @@ enum {
 	NM_TYPE_FILE	= 1 << STT_FILE,		/* -t file */
 	NM_TYPE_COMM	= 1 << STT_COMMON,		/* -t comm */
 	NM_TYPE_TLS	= 1 << STT_TLS,			/* -t tls */
+#ifndef linux
 	NM_TYPE_REGI	= 1 << STT_SPARC_REGISTER	/* -t regi */
+#endif
 };
 
 typedef struct {
@@ -140,8 +144,10 @@ nm_type2str(uchar_t info)
 		return ("COMM");
 	case STT_TLS:
 		return ("TLS");
+#ifndef linux
 	case STT_SPARC_REGISTER:
 		return ("REGI");
+#endif
 	default:
 		return ("?");
 	}
@@ -547,7 +553,9 @@ cmd_nm(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
 		{ NM_TYPE_FILE, "file" },
 		{ NM_TYPE_COMM, "comm" },
 		{ NM_TYPE_TLS, "tls" },
+#ifndef linux
 		{ NM_TYPE_REGI, "regi" },
+#endif
 		{ 0, NULL }
 	};
 
@@ -573,8 +581,11 @@ cmd_nm(uintptr_t addr, uint_t flags, int argc, const mdb_arg_t *argv)
 
 	/* default output types */
 	opt_types = NM_TYPE_NOTY | NM_TYPE_OBJT | NM_TYPE_FUNC | NM_TYPE_SECT |
+#ifndef linux
 	    NM_TYPE_FILE | NM_TYPE_COMM | NM_TYPE_TLS | NM_TYPE_REGI;
-
+#else
+	    NM_TYPE_FILE | NM_TYPE_COMM | NM_TYPE_TLS;
+#endif
 	i = mdb_getopts(argc, argv,
 	    'D', MDB_OPT_SETBITS, NM_DYNSYM, &optf,
 	    'P', MDB_OPT_SETBITS, NM_PRVSYM, &optf,

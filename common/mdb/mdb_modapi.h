@@ -37,7 +37,12 @@
  */
 
 #include <sys/types.h>
+#ifndef _HACK_MDB
 #include <sys/null.h>
+#endif
+#ifdef _HACK_MDB
+#include <sys/ccompile.h>
+#endif
 #include <gelf.h>
 
 #ifdef	__cplusplus

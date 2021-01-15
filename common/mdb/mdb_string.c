@@ -24,6 +24,9 @@
  * Use is subject to license terms.
  */
 
+#ifdef _HACK_MDB
+#include <sys_in.h>
+#endif
 #include <netinet/in.h>
 #include <limits.h>
 #include <sys/types.h>

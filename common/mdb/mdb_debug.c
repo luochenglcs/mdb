@@ -141,7 +141,7 @@ mdb_dmode(uint_t bits)
 {
 	int *libproc_debugp, *libctf_debugp;
 	void (*rd_logp)(const int);
-
+#ifndef _HACK_MDB
 	if ((libproc_debugp = dlsym(RTLD_SELF, "_libproc_debug")) != NULL)
 		*libproc_debugp = (bits & MDB_DBG_PROC) != 0;
 
@@ -150,7 +150,7 @@ mdb_dmode(uint_t bits)
 
 	if ((rd_logp = (void (*)())dlsym(RTLD_SELF, "rd_log")) != NULL)
 		rd_logp((bits & MDB_DBG_PSVC) != 0);
-
+#endif
 	mdb_lex_debug(bits & MDB_DBG_PARSER);
 	mdb.m_debug = bits;
 }

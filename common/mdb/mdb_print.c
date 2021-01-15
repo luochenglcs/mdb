@@ -45,10 +45,18 @@
 #include <sys/isa_defs.h>
 #include <sys/param.h>
 #include <sys/sysmacros.h>
+#ifdef _HACK_MDB
+#include <sys_in.h>
+#endif
 #include <netinet/in.h>
 #include <strings.h>
 #include <libctf.h>
 #include <ctype.h>
+
+#ifdef _HACK_MDB
+#define ISP2(x)		(((x) & ((x) - 1)) == 0)
+#define P2END(x, align)		(-(~(x) & -(align)))
+#endif
 
 typedef struct holeinfo {
 	ulong_t hi_offset;		/* expected offset */

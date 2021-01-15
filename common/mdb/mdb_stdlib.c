@@ -32,9 +32,12 @@
 #include <mdb/mdb_debug.h>
 
 #include <sys/types.h>
+#ifndef _HACK_MDB
 #include <floatingpoint.h>
+#endif
 #include <poll.h>
 
+#define DECIMAL_STRING_LENGTH 512
 /*
  * Post-processing routine for econvert and qeconvert.  This function is
  * called by both doubletos() and longdoubletos() below.
@@ -90,9 +93,13 @@ doubletos(double d, int precision, char expchr)
 	char digits[DECIMAL_STRING_LENGTH];
 	int decpt, sign;
 	char *p;
-
+#ifdef _HACK_MDB
+	gcvt(d, precision, buf);
+	return buf;
+#else
 	p = econvert(d, precision + 1, &decpt, &sign, digits);
 	return (fptos(p, buf, sizeof (buf), decpt, sign, expchr));
+#endif
 }
 
 /*
@@ -106,6 +113,11 @@ longdoubletos(long double *ldp, int precision, char expchr)
 	int decpt, sign;
 	char *p;
 
+#ifdef _HACK_MDB
+	gcvt(*ldp, precision, buf);
+	return buf;
+#else
 	p = qeconvert(ldp, precision + 1, &decpt, &sign, digits);
 	return (fptos(p, buf, sizeof (buf), decpt, sign, expchr));
+#endif
 }

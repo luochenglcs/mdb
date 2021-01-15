@@ -78,6 +78,7 @@
  * an MDB target, we simply pass the call through to libproc.
  */
 
+#include <sys/procfs.h>
 #include <proc_service.h>
 #include <dlfcn.h>
 

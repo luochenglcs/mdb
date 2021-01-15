@@ -32,7 +32,10 @@
  */
 
 #include <sys/types.h>
+
+#ifndef _HACK_MDB
 #include <sys/isa_defs.h>
+#endif
 
 #include <strings.h>
 #include <stdarg.h>
@@ -70,6 +73,10 @@ FILE __iob[_NFILE];
  */
 #ifdef input
 #undef input
+#endif
+
+#ifndef YY_NO_INPUT
+#define YY_NO_INPUT
 #endif
 
 #ifdef unput
@@ -733,6 +740,7 @@ string_unquote(char *s)
  * defined by the lex code, excluding those that do not change through the
  * course of yylex() and yyparse().
  */
+#ifndef _HACK_MDB
 extern struct yysvf *yylstate[], **yylsp, **yyolsp; extern int yyprevious;
 extern int *yyfnd;
 
@@ -747,6 +755,25 @@ extern YYSTYPE yylval;
 extern YYSTYPE yyval;
 extern int *yys;
 extern YYSTYPE *yyv;
+#else
+struct yysvf *yylstate[BUFSIZ], **yylsp, **yyolsp; int yyprevious;
+int *yyfnd;
+YYSTYPE *yypv;
+int *yyps;
+int yytmp;
+int yystate;
+extern int yyerrflag;
+extern int yynerrs;
+extern int yychar;
+extern YYSTYPE yylval;
+extern YYSTYPE yyval;
+int *yys;
+YYSTYPE *yyv;
+#endif
+int     yymorfg;
+void    *yybgin;
+void    *yyestate;
+#define YYNEWLINE	10
 
 typedef struct mdb_lex_state {
 	/* Variables needed by yylex */

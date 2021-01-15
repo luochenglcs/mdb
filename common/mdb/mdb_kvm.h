@@ -32,7 +32,9 @@
 #include <sys/machelf.h>
 #include <sys/dumphdr.h>
 #include <libctf.h>
+#ifndef _HACK_MDB
 #include <kvm.h>
+#endif
 
 #include <mdb/mdb_target.h>
 #include <mdb/mdb_list.h>
