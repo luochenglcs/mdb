@@ -10,7 +10,7 @@ CPPFLAGS += -I../libproc/common \
 CPPFLAGS += -D_LARGEFILE_SOURCE=1 -D_FILE_OFFSET_BITS=64
 
 BINDIR = ../$(BUILD_DIR)
-LIB = $(BINDIR)/libdtrace.a
+LIB = $(BINDIR)/librtld.a
 
 all: $(LIB)
 	@/bin/true
