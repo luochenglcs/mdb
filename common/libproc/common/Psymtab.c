@@ -489,10 +489,10 @@ Pupdate_maps(struct ps_prochandle *P)
 	}
 	Pmap = calloc(sizeof *Pmap, 1);
 	for (i = 0; fgets(buf, sizeof buf, fp); i++) {
-		unsigned long lo, hi, offset, inode;
-		char	perms[128];
-		char	majmin[128];
-		char	filename[BUFSIZ];
+		unsigned long lo = 0, hi = 0, offset = 0, inode = 0;
+		char	perms[128] = {0};
+		char	majmin[128]=  {0};
+		char	filename[BUFSIZ] = {0};
 		Pmap = realloc(Pmap, (i + 1) * sizeof *Pmap);
 		sscanf(buf, "%lx-%lx %s %lx %s %ld %s",
 			&lo, &hi, perms, &offset, majmin, &inode, filename);

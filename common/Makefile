@@ -156,6 +156,9 @@ all: $(PROG)
 $(PROG): $(OBJS) $(SUBLIBS) $(MODLIBS)
 	$(CC) -o $(PROG) $(OBJS) -ldl -lc -lm -lz -lelf -lbsd -lpthread -lncurses $(SUBLIBS) $(MODLIBS)
 
+install: $(PROG)
+	install -m 755 $(PROG) /usr/bin
+
 clean:
 	find . \( -name "*.o" -o -name "*.a" \) -exec rm -rf {} \;
 	rm -rf $(PROG)

@@ -188,44 +188,62 @@ iter_map(rd_agent_t *rap, unsigned long ident, psaddr_t lmaddr,
 //        while (lmaddr) {
 //}
 }
+#include <libgen.h>
+#define min(a, b) (((a) < (b)) ? (a) : (b))
 rd_err_e
 rd_loadobj_iter(rd_agent_t *rap, rl_iter_f *cb, void *client_data)
 {	char	buf[256];
 	FILE	*fp;
 	int	ret;
 
-	printf("%s\n", __func__);
+	printf("loading modules: [ ");
 	snprintf(buf, sizeof buf, "/proc/%d/maps", rap->rd_pid);
 	if ((fp = fopen(buf, "r")) == NULL) {
 		return RD_ERR;
 	}
 	while (fgets(buf, sizeof buf, fp) != NULL) {
-		char	*addr_str;
-		void	*addr;
-		char	*perms;
 		char	*lib;
 		uint_t	abort_iter;
 		rd_loadobj_t lobj;
+                unsigned long lo = 0, hi = 0, offset = 0, inode = 0;
+                char    perms[128] = {0};
+                char    majmin[128]=  {0};
+                char    filename[BUFSIZ] = {0};
 
-		if (strcmp(buf + strlen(buf) - 4, ".so\n") != 0)
-			continue;
-		buf[strlen(buf)-1] = '\0';
-		lib = strrchr(buf, ' ');
-		if (lib == NULL)
-			continue;
-		lib++;
-		addr_str = strtok(buf, " ");
-		perms = strtok(NULL, " ");
-		if (strchr(perms, 'x') == NULL)
-			continue;
+                sscanf(buf, "%lx-%lx %s %lx %s %ld %s",
+                        &lo, &hi, perms, &offset, majmin, &inode, filename);
 
-		addr = strtol(addr_str, NULL, 16);
 
-printf("rd_loadobj_iter: %s %p\n", lib, addr);
-		lobj.rl_base = addr;
+		if ((filename[0] != '/') || (perms[2] != 'x')) {
+			continue;
+		}
+
+		char tfile[BUFSIZ] = {0};
+		strncpy(tfile, filename, BUFSIZ);
+		char *base = basename(tfile);
+		int isdynlib = 0;
+		char *n;
+		char *outptr = NULL;
+		while ((n = strtok_r(base, ".", &outptr)) != NULL) {
+			if (!strcmp(n, "so")) {
+				isdynlib = 1;
+				break;
+			}
+			base = NULL;
+		}
+
+		if (!isdynlib) {
+			continue;
+		}
+
+		lib = (char *)malloc(BUFSIZ);
+		strncpy(lib, filename, BUFSIZ);
+		printf("%s ", basename(filename));
+		lobj.rl_base = lo;
 		lobj.rl_nameaddr = lib;
 		ret = cb(&lobj, client_data);
 	}
+	printf("]\n");
 	fclose(fp);
 	return RD_OK;
 }
@@ -261,7 +279,7 @@ rd_errstr(int rderr)
 rd_err_e
 rd_event_addr(rd_agent_t *rdap, rd_event_e event, rd_notify_t *notify)
 {
-	printf("proc-stub:%s addr=%p\n", __func__, (void *) rdap->rda_addr);
+	//printf("proc-stub:%s addr=%p\n", __func__, (void *) rdap->rda_addr);
 	notify->type = RD_NOTIFY_BPT;
         notify->u.bptaddr = rdap->rda_addr;
 
@@ -270,7 +288,7 @@ rd_event_addr(rd_agent_t *rdap, rd_event_e event, rd_notify_t *notify)
 int
 rd_event_enable(rd_agent_t *rdap, int onoff)
 {
-	printf("proc-stub:%s\n", __func__);
+	//printf("proc-stub:%s\n", __func__);
 	return RD_OK;
 }
 rd_err_e

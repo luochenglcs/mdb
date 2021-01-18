@@ -557,7 +557,7 @@ yydiscard(void)
 				break;
 		}
 	}
-
+	yyrestart(yyin);
 	BEGIN(S_INITIAL);
 }
 

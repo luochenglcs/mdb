@@ -410,7 +410,6 @@ leaky_handle_anon_mappings(leak_mtab_t **lmp)
 
 	lm.lm_lmp = lmp;
 
-#ifndef _HACK_LIBUMEM
 	prockludge_add_walkers();
 
 	if (mdb_walk(KLUDGE_MAPWALK_NAME,
@@ -421,7 +420,6 @@ leaky_handle_anon_mappings(leak_mtab_t **lmp)
 	}
 
 	prockludge_remove_walkers();
-#endif
 	leaky_handle_sbrk(&lm);
 
 	return (DCMD_OK);
@@ -600,6 +598,7 @@ leaky_process_lwp(void *ignored, const lwpstatus_t *lwp)
 static int
 leaky_process_proc(void)
 {
+	printf("TO_DO %s\n",__func__);
 #ifndef _HACK_LIBUMEM
 	pstatus_t Ps;
 	struct ps_prochandle *Pr;
@@ -629,7 +628,6 @@ leaky_process_proc(void)
 		mdb_warn("findleaks: Failed to iterate lwps\n");
 		return (DCMD_ERR);
 	}
-
 	prockludge_add_walkers();
 
 	leaky_mappings_header();
@@ -740,7 +738,6 @@ leaky_subr_estimate(size_t *estp)
 		mdb_warn("findleaks: No allocated buffers found.\n");
 		return (DCMD_ERR);
 	}
-#ifndef _HACK_LIBUMEM
 	prockludge_add_walkers();
 
 	if (mdb_walk(KLUDGE_MAPWALK_NAME, (mdb_walk_cb_t)leaky_count,
@@ -750,7 +747,6 @@ leaky_subr_estimate(size_t *estp)
 		return (DCMD_ERR);
 	}
 	prockludge_remove_walkers();
-#endif
 
 	return (DCMD_OK);
 }

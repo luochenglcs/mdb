@@ -52,3 +52,5 @@ dkms.conf
 
 .DS_Store
 .vscode*
+cscope.files
+tags

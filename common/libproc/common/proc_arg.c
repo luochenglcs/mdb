@@ -155,6 +155,7 @@ proc_grab_common(const char *arg, const char *path, int oflag, int gflag,
 		*slash = '\0';
 		if ((oflag & PR_ARG_PIDS) &&
 		    (fd = open_psinfo(arg, perr)) != -1) {
+			printf("TO_DO %s\n", __func__);
 #ifdef _HACK_LIBPROC
 			if (read(fd, &psinfo, sizeof (psinfo_t))) {
 				psinfo.pr_pid = atoi(arg);
