@@ -152,7 +152,7 @@ struct modctl;
 	# include	<sys/time.h>
 	# include	<sys/processor.h>
 	# include	<sys/systm.h>
-	# include 	<sys/vmem.h>
+	//# include 	<sys/vmem.h>
 
 # endif /* __KERNEL__ */
 
